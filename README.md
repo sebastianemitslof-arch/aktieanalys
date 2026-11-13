@@ -18,7 +18,7 @@ konfigurationen.
 |------|----------|--------|
 | 1 | Projektstruktur, konfiguration, validering | **klart** |
 | 2 | Datalager: yfinance, SQLite-cache, CSV-komplettering | **klart** |
-| 3 | Universum: filtrering och datatäckningskontroll | kommer |
+| 3 | Universum: filtrering och datatäckningskontroll | **klart** |
 | 4 | Poängmodellen | kommer |
 | 5 | Kvalitativt lager (Claude) | kommer |
 | 6 | Bytesregler och kostnadsberäkning | kommer |
@@ -131,6 +131,69 @@ Statistik över databasen:
 ```bash
 python -m aktieanalys visa-databas
 ```
+
+---
+
+## Urvalet -- vilka bolag som får vara med
+
+```bash
+python -m aktieanalys visa-urval
+```
+
+Med börsvärde och omsättning för varje bolag:
+
+```bash
+python -m aktieanalys visa-urval --utforlig
+```
+
+Tre spärrar, i den här ordningen:
+
+**1. Storlek och likviditet.** Börsvärde minst `min_borsvarde_mdr`,
+omsättning minst `min_daglig_omsattning_mkr` per dag. Omsättningen räknas
+i kronor (kurs gånger volym över 60 dagar), inte i antal aktier.
+
+**2. Vilka mått som alls går att rangordna på.** Ett mått som färre än
+`min_bolag_for_rank` bolag har data för faller bort ur kategorin -- en
+percentilrank bland två bolag säger ingenting.
+
+**3. Bolag som saknar data de andra har.** Fler än
+`max_saknade_matt_per_bolag` saknade mått och bolaget utesluts.
+
+**Ordningen mellan 2 och 3 är det viktiga.** Saknas ett mått för *alla*
+bolag i en kategori är det måttet som ska falla bort, inte bolagen.
+Annars hade varje bank uteslutits bara för att ingen har
+kapitaltäckningen ifylld, och kategorin blivit tom i stället för att
+bedömas på de fem mått som faktiskt går att räkna.
+
+Rapporten visar därför alltid både sidor: vilka mått som används, vilka
+som valts bort och varför, och vilka pelare som blivit helt tomma --
+med hur stor del av poängvikten som då inte går att sätta.
+
+### Innehav utesluts aldrig
+
+Ett bolag du äger försvinner aldrig ur rapporten, hur illa det än ser
+ut. Har innehavet krympt under gränsen eller tappat data får du en
+varning i stället:
+
+```
+innehav: B1.ST
+  VARNING  INNEHAVET klarar inte längre urvalskraven: börsvärde 2.0 mdr kr,
+           under gränsen 5 mdr
+```
+
+Att ett innehav blivit för litet eller slutat gå att bedöma är i sig
+något du behöver veta -- inte något som ska tystas genom att bolaget
+sorteras bort.
+
+### Urvalet vid en tidigare tidpunkt
+
+```bash
+python -m aktieanalys visa-urval --datum 2026-05-03
+```
+
+Gör urvalet med bara den data som fanns den dagen. Det är samma väg
+backtestet går, och ett sätt att själv kontrollera att ingen
+framtidsinformation läcker in.
 
 ---
 

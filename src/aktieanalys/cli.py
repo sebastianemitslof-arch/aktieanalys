@@ -228,6 +228,84 @@ def _visa_databas(args: argparse.Namespace) -> int:
     return 0
 
 
+def _visa_urval(args: argparse.Namespace) -> int:
+    import datetime as dt
+
+    from aktieanalys.universum import MDR, MKR, las_och_valj
+
+    inst = las_installningar(args.config)
+    logg.satt_upp(inst.config.loggning.niva, inst.loggfil)
+    datum = dt.date.fromisoformat(args.datum) if args.datum else None
+
+    if not inst.databasvag.exists():
+        print("Databasen finns inte än. Kör först: python -m aktieanalys hamta-data")
+        return 1
+
+    urval, data = las_och_valj(inst, datum)
+    c = inst.config.universum
+
+    print(f"Urval per {urval.datum}")
+    print(f"  gränser: börsvärde minst {c.min_borsvarde_mdr:.0f} mdr kr, "
+          f"omsättning minst {c.min_daglig_omsattning_mkr:.0f} mkr/dag")
+    print(f"  utesluts vid fler än {c.max_saknade_matt_per_bolag} saknade mått")
+    print(f"  {urval.sammanfattning()}\n")
+
+    for namn, ku in urval.kategorier.items():
+        rubrik = f"{namn}  --  {ku.antal} bolag av {len(inst.universum.kategorier[namn].bolag)}"
+        print(rubrik)
+        print("-" * len(rubrik))
+
+        if not ku.rangordningsbar:
+            print("  GÅR INTE ATT RANGORDNA: "
+                  f"{ku.antal} bolag, {len(ku.anvandbara_matt)} användbara mått")
+
+        tomma = ku.saknade_pelare(inst)
+        if tomma:
+            vikt = sum(inst.config.poang.vikter.som_dict()[p] for p in tomma)
+            print(f"  TOMMA PELARE: {', '.join(tomma)} "
+                  f"-- {vikt:.0%} av poängvikten går inte att sätta")
+
+        print(f"  mått som används ({len(ku.anvandbara_matt)}): "
+              f"{', '.join(ku.anvandbara_matt) or 'inga'}")
+        for m, orsak in ku.bortvalda_matt.items():
+            print(f"    BORTVALT  {m}: {orsak}")
+
+        if ku.innehav:
+            print(f"  innehav: {ku.innehav}")
+            for v in ku.innehav_varningar:
+                print(f"    VARNING  {v}")
+        else:
+            print("  innehav: (inget -- rapporten föreslår förstagångsköp)")
+
+        if args.utforlig and ku.med:
+            print("  med i urvalet:")
+            rader = []
+            for ticker in ku.med:
+                bd = data[ticker]
+                bv = bd.varde("borsvarde")
+                om = bd.varde("daglig_omsattning")
+                saknade = [m for m in ku.anvandbara_matt
+                           if not bd.har_alla(MATT[m].kraver)]
+                rader.append((bv or 0, ticker, bv, om, saknade))
+            for _, ticker, bv, om, saknade in sorted(rader, reverse=True):
+                bvt = f"{bv / MDR:7.1f}" if bv else "      ?"
+                omt = f"{om / MKR:6.0f}" if om else "     ?"
+                extra = f"  saknar: {', '.join(saknade)}" if saknade else ""
+                print(f"    {ticker:14} {bvt} mdr  {omt} mkr/dag{extra}")
+
+        if ku.uteslutna:
+            print(f"  uteslutna ({len(ku.uteslutna)}):")
+            for u in ku.uteslutna:
+                print(f"    {u.ticker:14} {u.orsak}")
+        print()
+
+    if urval.utan_data:
+        print(f"Bolag utan data ({len(urval.utan_data)}):")
+        for ticker, orsak in sorted(urval.utan_data.items()):
+            print(f"  {ticker:14} {orsak}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="python -m aktieanalys",
@@ -274,6 +352,16 @@ def main(argv: list[str] | None = None) -> int:
     under.add_parser(
         "visa-databas", help="statistik över databasen"
     ).set_defaults(func=_visa_databas)
+
+    p_urval = under.add_parser(
+        "visa-urval",
+        help="vilka bolag som får vara med, vilka som utesluts och varför",
+    )
+    p_urval.add_argument("--utforlig", action="store_true",
+                         help="visa börsvärde och omsättning för varje bolag")
+    p_urval.add_argument("--datum", metavar="ÅÅÅÅ-MM-DD",
+                         help="gör urvalet med den data som fanns ett visst datum")
+    p_urval.set_defaults(func=_visa_urval)
 
     args = p.parse_args(argv)
     logg.satt_upp()
