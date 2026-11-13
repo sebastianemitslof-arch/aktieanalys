@@ -1,55 +1,33 @@
-# SUBSTANSVÄRDEN -- investmentbolag och fastighetsbolag
+# SUBSTANSVÄRDEN -- fastighetsbolag (FRIVILLIGT)
 #
-# Fyll i en rad per bolag och år. Siffrorna hittar du i bolagets
-# kvartalsrapport eller på deras investerarsida. Investmentbolagen
-# rapporterar substansvärde per aktie varje månad.
+# Den här filen är frivillig. Fastighetsbolagens substansvärden
+# härleds automatiskt ur eget kapital med 0,6 procents uppmätt fel
+# (se README). Skriver du in verkliga tal här tar de över, bolag
+# för bolag och år för år.
+#
+# Kategorin investmentbolag är borttagen ur universum.yaml, så
+# deras substansvärden behövs inte längre.
+#
+# Fyll i en rad per bolag och år. Siffran hittar du i bolagets
+# kvartalsrapport, oftast kallad "långsiktigt substansvärde" eller
+# "EPRA NRV" per aktie.
 #
 # substansvarde_per_aktie  = rapporterat substansvärde per aktie, i kronor.
-#                            För fastighetsbolag: långsiktigt substansvärde
-#                            (EPRA NRV) per aktie.
+#                            Långsiktigt substansvärde (EPRA NRV) per aktie.
 # substansvarde_totalt     = substansvärde för hela bolaget, i kronor.
-#                            Behövs bara för investmentbolagens
-#                            skuldsättningsmått. Lämna tom om du hoppar över det.
+#                            Används inte av något mått i dag. Lämna tom.
 #
 # Kolumnen ar är det räkenskapsår uppgiften gäller. Minst 3 år behövs för
-# att substansvärdets utveckling och snittrabatten ska kunna räknas.
+# att substansvärdets utveckling ska kunna räknas.
 # Tomma celler betyder "uppgift saknas" -- de blir aldrig nollor.
 # Använd punkt som decimaltecken och inga tusenavskiljare: 385.50
 #
 # Exempel (ta bort # framför raderna och byt till verkliga tal):
-# INVE-B.ST,2025,385.50,1180000000000
-# INVE-B.ST,2024,342.10,1048000000000
-# INVE-B.ST,2023,298.40,914000000000
+# CAST.ST,2025,160.00,
+# CAST.ST,2024,160.00,
+# CAST.ST,2023,156.00,
 #
 ticker,ar,substansvarde_per_aktie,substansvarde_totalt
-INVE-B.ST,2025,,
-INVE-B.ST,2024,,
-INVE-B.ST,2023,,
-
-INDU-C.ST,2025,,
-INDU-C.ST,2024,,
-INDU-C.ST,2023,,
-
-LATO-B.ST,2025,,
-LATO-B.ST,2024,,
-LATO-B.ST,2023,,
-
-LUND-B.ST,2025,,
-LUND-B.ST,2024,,
-LUND-B.ST,2023,,
-
-KINV-B.ST,2025,,
-KINV-B.ST,2024,,
-KINV-B.ST,2023,,
-
-SVOL-B.ST,2025,,
-SVOL-B.ST,2024,,
-SVOL-B.ST,2023,,
-
-BURE.ST,2025,,
-BURE.ST,2024,,
-BURE.ST,2023,,
-
 CAST.ST,2025,,
 CAST.ST,2024,,
 CAST.ST,2023,,

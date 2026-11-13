@@ -131,16 +131,18 @@ poang:
       momentum:
         momentum_12m_exkl_1m: 1.00
 
-    # Investmentbolag. Värderas mot substansvärdet, inte mot vinsten.
-    investmentbolag:
-      kvalitet:
-        substansvarde_tillvaxt: 1.00
-      vardering:
-        substansrabatt_mot_historik: 1.00
-      finansiell_styrka:
-        skuldsattning_mot_substans: 1.00
-      momentum:
-        momentum_12m_exkl_1m: 1.00
+    # Investmentbolag -- avstängd. Kategorin är borttagen ur
+    # universum.yaml (2026-11-13), så den här uppsättningen används inte.
+    # Den står kvar för att vara lätt att slå på igen.
+    # investmentbolag:
+    #   kvalitet:
+    #     substansvarde_tillvaxt: 1.00
+    #   vardering:
+    #     substansrabatt_mot_historik: 1.00
+    #   finansiell_styrka:
+    #     skuldsattning_mot_substans: 1.00
+    #   momentum:
+    #     momentum_12m_exkl_1m: 1.00
 
 
 # ---------------------------------------------------------------------

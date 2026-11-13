@@ -26,7 +26,7 @@ from tests.conftest import KONFIGKATALOG
 def test_medfoljande_config_ar_giltig():
     """Filerna i config/ ska validera som de levereras."""
     inst = las_installningar(KONFIGKATALOG)
-    assert len(inst.kategorinamn) == 7
+    assert len(inst.kategorinamn) == 6
     assert len(inst.alla_tickers()) > 50
 
 
@@ -71,9 +71,9 @@ def test_bank_och_fastighet_anvander_sektorsmatt():
     assert "substansvarde_tillvaxt" in fastighet
     assert "forvaltningsresultat_per_aktie_tillvaxt" not in fastighet
 
-    inv = inst.mattuppsattning_for("Investmentbolag").alla_matt()
-    assert "substansrabatt_mot_historik" in inv
-    assert "substansvarde_tillvaxt" in inv
+    # Kategorin investmentbolag är borttagen (2026-11-13). Måtten finns
+    # kvar i katalogen, men ingen kategori använder dem.
+    assert "Investmentbolag" not in inst.kategorinamn
 
 
 # =====================================================================

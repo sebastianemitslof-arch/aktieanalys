@@ -1,6 +1,6 @@
 # Aktieanalys -- beslutsstöd för en liten svensk portfölj
 
-Ett verktyg som varje vecka analyserar en portfölj med sju svenska bolag,
+Ett verktyg som varje vecka analyserar en portfölj med sex svenska bolag,
 ett per kategori, och mejlar en rapport. Det är ett komplement till en
 global indexfond.
 
@@ -199,18 +199,21 @@ framtidsinformation läcker in.
 
 ## Fylla i det som saknas för hand
 
-Åtta nyckeltal finns inte i yfinance och går inte att räkna fram. Utan
-dem kan fastighetsbolag, investmentbolag och banker inte bedömas
-rättvist. De fyller du i i `data/manuellt/`:
+Ett nyckeltal finns inte i yfinance och går inte att härleda:
+bankernas kapitaltäckning. Resten löser sig själv.
 
-| Fil | För vilka | Vad du fyller i |
+| Fil | För vilka | Status |
 |---|---|---|
-| `substansvarden.csv` | Investmentbolag | substansvärde per aktie, och totalt -- **behövs**, går inte att härleda |
-| `fastighetsdata.csv` | Fastighet | förvaltningsresultat per aktie, belåningsgrad, räntetäckningsgrad -- **frivilligt**, härleds annars automatiskt |
-| `bankdata.csv` | Bank/finans | kärnprimärkapitalrelation (CET1) |
+| `bankdata.csv` | Bank/finans | **behövs** -- 7 tal, ger bankerna sin fjärde poängpelare |
+| `fastighetsdata.csv` | Fastighet | frivilligt -- härleds annars automatiskt |
+| `substansvarden.csv` | Fastighet | frivilligt -- härleds annars automatiskt |
 
-**Filerna är redan förifyllda med rader** för de bolag som behöver dem
--- 7 investmentbolag, 7 fastighetsbolag och 7 banker, tre år tillbaka.
+Fyller du i de frivilliga filerna tar dina verkliga tal över de härledda
+proxyvärdena, bolag för bolag och år för år. Du behöver alltså bara de
+sju CET1-talen för att alla sex kategorier ska kunna bedömas fullt ut.
+
+**Filerna är redan förifyllda med rader** för de bolag som berörs -- 7
+banker och 7 fastighetsbolag.
 Du behöver bara skriva in talen i rätt ruta. Så här ser en rad ut före
 och efter:
 
@@ -294,9 +297,11 @@ aktie. Härledda tal per aktie använder därför räkenskapernas eget
 aktieantal, år för år -- så att Castellums nyemission 2023 (391 → 493
 miljoner aktier) räknas rätt i historiken.
 
-### Investmentbolag härleds aldrig
+### Varför härledningen bara gäller fastighet
 
-Samma härledning för investmentbolag hade varit systematiskt fel:
+Samma härledning för investmentbolag hade varit systematiskt fel. Det
+är skälet till att koden spärrar den -- och i förlängningen till att
+kategorin investmentbolag är borttagen ur universumet:
 
 | Bolag | Eget kapital per aktie | Rapporterat substansvärde |
 |---|---|---|
@@ -307,8 +312,10 @@ Investor och Industrivärden redovisar innehav till **marknadsvärde**, så
 eget kapital *är* substansvärdet. Latour redovisar industrirörelsen till
 **bokfört värde**. Att rangordna dem mot varandra på bokfört eget
 kapital hade gjort Latour till Sveriges dyraste bolag. Investmentbolagens
-substansvärden måste komma från bolagens egen rapportering -- det är de
-18 talen i `data/manuellt/substansvarden.csv`.
+substansvärden måste komma från bolagens egen rapportering, och eftersom
+den inte går att hämta automatiskt är kategorin avstängd i
+`config/universum.yaml`. Den går att slå på igen -- instruktionen står i
+filen.
 
 ### När en härledning dras tillbaka
 
@@ -569,9 +576,9 @@ inte raderar något. Kör du `hamta-data --tvinga` flera gånger i rad är
 det väntat att Yahoo blir snål -- vänta en stund och kör igen.
 
 **Vissa uppgifter finns inte alls i yfinance** och måste fyllas i för
-hand i CSV-filer i `data/manuellt/`: substansvärden för investmentbolag,
-förvaltningsresultat och belåningsgrad för fastighetsbolag,
-kapitaltäckning för banker. Det byggs i steg 2.
+hand i CSV-filer i `data/manuellt/`. Fastighetsbolagens nyckeltal härleds
+numera automatiskt ur råposter, med uppmätt noggrannhet; bara bankernas
+kapitaltäckning måste fyllas i.
 
 **Backtestet blir approximativt.** yfinance levererar inte historiska
 fundamenta med uppgift om *när* de offentliggjordes, och bara fyra till

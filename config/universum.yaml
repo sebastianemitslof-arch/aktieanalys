@@ -58,23 +58,38 @@ kategorier:
       #                 inte på någon stavning. Bolaget är utköpt från börsen.
       - NORION.ST      # Norion Bank
 
-  # Bantad till 7 bolag 2026-11-13: varje bolag kräver substansvärden
-  # inskrivna för hand i data/manuellt/substansvarden.csv. Sju bolag
-  # räcker för en meningsfull percentilrank. Vill du ha fler: ta bort #
-  # på raderna nedan och fyll i deras substansvärden.
-  Investmentbolag:
-    mattuppsattning: investmentbolag
-    bolag:
-      - INVE-B.ST      # Investor
-      - INDU-C.ST      # Industrivarden
-      - LATO-B.ST      # Latour
-      - LUND-B.ST      # Lundbergforetagen
-      - KINV-B.ST      # Kinnevik
-      - SVOL-B.ST      # Svolder
-      # - CRED-A.ST      # Creades -- avstängt: kräver manuell data
-      - BURE.ST        # Bure Equity
-      # - TRAC-B.ST      # Traction -- avstängt: kräver manuell data
-      # - ORES.ST        # Investment AB Oresund -- avstängt: kräver manuell data
+  # ------------------------------------------------------------------
+  # INVESTMENTBOLAG -- avstängd kategori (2026-11-13)
+  #
+  # Borttagen på egen begäran. Substansvärden går inte att hämta
+  # automatiskt och inte heller att härleda: Investor och
+  # Industrivärden redovisar innehav till marknadsvärde, så deras egna
+  # kapital ÄR substansvärdet, medan Latour redovisar industrirörelsen
+  # till bokfört värde och har ett eget kapital på en bråkdel av
+  # substansvärdet. Se avsnittet om härledda mått i README.
+  #
+  # Vill du ha kategorin tillbaka: ta bort # från raderna nedan, lägg
+  # tillbaka raden för Investmentbolag i portfolj.yaml, ta bort # från
+  # måttuppsättningen investmentbolag i config.yaml, och fyll i
+  # substansvärden i data/manuellt/substansvarden.csv.
+  # ------------------------------------------------------------------
+#  # Bantad till 7 bolag 2026-11-13: varje bolag kräver substansvärden
+#  # inskrivna för hand i data/manuellt/substansvarden.csv. Sju bolag
+#  # räcker för en meningsfull percentilrank. Vill du ha fler: ta bort #
+#  # på raderna nedan och fyll i deras substansvärden.
+  #Investmentbolag:
+  #  mattuppsattning: investmentbolag
+  #  bolag:
+  #    - INVE-B.ST      # Investor
+  #    - INDU-C.ST      # Industrivarden
+  #    - LATO-B.ST      # Latour
+  #    - LUND-B.ST      # Lundbergforetagen
+  #    - KINV-B.ST      # Kinnevik
+  #    - SVOL-B.ST      # Svolder
+  #    # - CRED-A.ST      # Creades -- avstängt: kräver manuell data
+  #    - BURE.ST        # Bure Equity
+  #    # - TRAC-B.ST      # Traction -- avstängt: kräver manuell data
+  #    # - ORES.ST        # Investment AB Oresund -- avstängt: kräver manuell data
 
   Halsovard:
     mattuppsattning: standard

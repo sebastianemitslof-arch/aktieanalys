@@ -27,7 +27,10 @@ def test_sektorsmatt_finns():
         "roe", "p_b", "kapitalstyrka",                       # banker
         "forvaltningsresultat_per_aktie_tillvaxt",            # fastighet
         "belaningsgrad", "rantetackningsgrad", "kurs_mot_substans",
-        "substansrabatt_mot_historik", "substansvarde_tillvaxt",  # investmentbolag
+        # substansvarde_tillvaxt används av fastighet; substansrabatt_mot_historik
+        # av den avstängda investmentbolagskategorin och ska finnas kvar i
+        # katalogen så att den går att slå på igen.
+        "substansrabatt_mot_historik", "substansvarde_tillvaxt",
     ]:
         assert namn in MATT, f"måttet {namn} saknas i katalogen"
 

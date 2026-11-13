@@ -32,12 +32,6 @@ innehav:
     antal: 0
     anskaffningskurs: 0
 
-  Investmentbolag:
-    ticker: ""
-    kopdatum: ""
-    antal: 0
-    anskaffningskurs: 0
-
   Halsovard:
     ticker: ""
     kopdatum: ""
