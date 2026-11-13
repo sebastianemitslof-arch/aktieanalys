@@ -20,7 +20,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from aktieanalys.poang.matt import MATT, Pelare, okand_matt
 
@@ -87,8 +94,18 @@ class Mattuppsattning(_Bas):
 class Poanginstallningar(_Bas):
     vikter: Vikter
     antal_ar_historik: int = Field(ge=2, le=20)
+    min_ar_historik: int = Field(ge=2, le=20)
     min_bolag_for_rank: int = Field(ge=2)
     mattuppsattningar: dict[str, Mattuppsattning]
+
+    @model_validator(mode="after")
+    def _historikordning(self) -> Poanginstallningar:
+        if self.min_ar_historik > self.antal_ar_historik:
+            raise ValueError(
+                f"min_ar_historik ({self.min_ar_historik}) kan inte vara större "
+                f"än antal_ar_historik ({self.antal_ar_historik})"
+            )
+        return self
 
     @field_validator("mattuppsattningar")
     @classmethod

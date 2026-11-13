@@ -1,0 +1,24 @@
+# SUBSTANSVÄRDEN -- investmentbolag och fastighetsbolag
+#
+# Fyll i en rad per bolag och år. Siffrorna hittar du i bolagets
+# kvartalsrapport eller på deras investerarsida. Investmentbolagen
+# rapporterar substansvärde per aktie varje månad.
+#
+# substansvarde_per_aktie  = rapporterat substansvärde per aktie, i kronor.
+#                            För fastighetsbolag: långsiktigt substansvärde
+#                            (EPRA NRV) per aktie.
+# substansvarde_totalt     = substansvärde för hela bolaget, i kronor.
+#                            Behövs bara för investmentbolagens
+#                            skuldsättningsmått. Lämna tom om du hoppar över det.
+#
+# Kolumnen ar är det räkenskapsår uppgiften gäller. Minst 3 år behövs för
+# att substansvärdets utveckling och snittrabatten ska kunna räknas.
+# Tomma celler betyder "uppgift saknas" -- de blir aldrig nollor.
+# Använd punkt som decimaltecken och inga tusenavskiljare: 385.50
+#
+# Exempel (ta bort # framför raderna och byt till verkliga tal):
+# INVE-B.ST,2025,385.50,1180000000000
+# INVE-B.ST,2024,342.10,1048000000000
+# INVE-B.ST,2023,298.40,914000000000
+#
+ticker,ar,substansvarde_per_aktie,substansvarde_totalt

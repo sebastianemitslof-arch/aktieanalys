@@ -41,7 +41,9 @@ class Mattdefinition:
     riktning: Riktning
     beskrivning: str
     kraver: tuple[str, ...]
-    """Vilka rådatafält måttet behöver. Saknas något blir måttet None
+    """Vilka RÅDATAFÄLT måttet behöver -- namn ur FALT i data/bolagsdata.py.
+    Härledda tal (marginaler, historiska P/E-tal) står inte här, utan
+    räknas fram i poängmodellen ur de råfält som listas. Saknas något blir måttet None
     (aldrig 0) och bolaget räknas som att det saknar data för måttet."""
 
 
@@ -88,7 +90,8 @@ MATT: dict[str, Mattdefinition] = {
             H,
             "Hur jämn rörelsemarginalen varit över 5 år. Högt värde = stabil "
             "marginal. Mäter uthållighet, inte nivå.",
-            "rorelsemarginal_historik",
+            "rorelseresultat_historik",
+            "omsattning_historik",
         ),
         _m(
             "vinststabilitet_5ar",
@@ -140,7 +143,9 @@ MATT: dict[str, Mattdefinition] = {
             "billigare än bolaget brukar vara.",
             "bolagsvarde",
             "rorelseresultat",
-            "ev_ebit_historik",
+            "rorelseresultat_historik",
+            "kurshistorik",
+            "antal_aktier",
         ),
         _m(
             "pe_mot_egen_historik",
@@ -149,7 +154,7 @@ MATT: dict[str, Mattdefinition] = {
             "Dagens P/E jämfört med bolagets eget 5-årssnitt.",
             "kurs",
             "vinst_per_aktie",
-            "pe_historik",
+            "vinst_per_aktie_historik",
         ),
         _m(
             "p_b",
@@ -186,7 +191,8 @@ MATT: dict[str, Mattdefinition] = {
             "historiska snitt. Högt värde = ovanligt stor rabatt just nu.",
             "kurs",
             "substansvarde_per_aktie",
-            "substansrabatt_historik",
+            "substansvarde_per_aktie_historik",
+            "kurshistorik",
         ),
         # ---------------- Finansiell styrka ----------------
         _m(

@@ -57,6 +57,13 @@ poang:
   # (marginalstabilitet, egen värderingshistorik).
   antal_ar_historik: 5
 
+  # Men yfinance levererar i praktiken bara 4 år för svenska bolag. Ett
+  # mått som bygger på historik räknas därför så länge det finns minst
+  # så här många år, och rapporten visar hur många år som användes.
+  # Databasen sparar varje hämtning med datum, så historiken växer med
+  # tiden och närmar sig antal_ar_historik av sig själv.
+  min_ar_historik: 3
+
   # Finns färre än så här många bolag med data för ett mått i en
   # kategori hoppas måttet över -- en percentilrank bland två bolag
   # säger ingenting.

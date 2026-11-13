@@ -1,0 +1,16 @@
+# BANKER -- kapitalstyrka
+#
+# cet1_kvot = kärnprimärkapitalrelation (CET1), som ANDEL.
+#             Skriv 0.18 för 18 procent. Står i bankens kvartalsrapport,
+#             ofta kallad "kärnprimärkapitalrelation" eller "CET1 ratio".
+#
+# Det här är bankernas mått på finansiell styrka i poängmodellen -- deras
+# motsvarighet till nettoskuld/EBITDA. Saknas det får banken inga poäng
+# på pelaren finansiell styrka, och saknas det för många banker blir hela
+# kategorin omöjlig att rangordna rättvist.
+#
+# Exempel (ta bort # och byt till verkliga tal):
+# SEB-A.ST,2025,0.182
+# SEB-A.ST,2024,0.191
+#
+ticker,ar,cet1_kvot

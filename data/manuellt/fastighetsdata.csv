@@ -1,0 +1,25 @@
+# FASTIGHETSBOLAG -- förvaltningsresultat och skuldmått
+#
+# De här tre nyckeltalen finns inte i yfinance, och fastighetsbolag kan
+# inte bedömas utan dem. Redovisad vinst svänger med orealiserade
+# värdeförändringar; förvaltningsresultatet är den löpande intjäningen.
+#
+# forvaltningsresultat_per_aktie = förvaltningsresultat delat med antal
+#                                  aktier, i kronor. Står i resultaträkningen,
+#                                  ofta som egen rad.
+# belaningsgrad                  = räntebärande skulder mot fastighetsvärde,
+#                                  som ANDEL: skriv 0.45 för 45 procent.
+# rantetackningsgrad             = hur många gånger driftnettot täcker
+#                                  räntekostnaderna, t.ex. 2.8.
+#
+# Minst 3 år behövs för att tillväxten i förvaltningsresultat ska kunna
+# räknas. Belåningsgrad och räntetäckning används bara för senaste året,
+# men fyll gärna i flera år.
+# Använd punkt som decimaltecken: 0.45 -- inte 45 eller 0,45
+#
+# Exempel (ta bort # och byt till verkliga tal):
+# CAST.ST,2025,11.20,0.41,3.10
+# CAST.ST,2024,10.45,0.43,2.85
+# CAST.ST,2023,9.80,0.44,2.60
+#
+ticker,ar,forvaltningsresultat_per_aktie,belaningsgrad,rantetackningsgrad

@@ -17,7 +17,7 @@ konfigurationen.
 | Steg | Innehåll | Status |
 |------|----------|--------|
 | 1 | Projektstruktur, konfiguration, validering | **klart** |
-| 2 | Datalager: yfinance, SQLite-cache, CSV-komplettering | kommer |
+| 2 | Datalager: yfinance, SQLite-cache, CSV-komplettering | **klart** |
 | 3 | Universum: filtrering och datatäckningskontroll | kommer |
 | 4 | Poängmodellen | kommer |
 | 5 | Kvalitativt lager (Claude) | kommer |
@@ -78,6 +78,146 @@ Kör testerna (42 stycken just nu). Gör det efter varje ändring i koden:
 ```bash
 pytest
 ```
+
+---
+
+## Hämta data
+
+Hämta allt (90 bolag, tar några minuter första gången):
+
+```bash
+python -m aktieanalys hamta-data
+```
+
+Prova med bara några bolag först:
+
+```bash
+python -m aktieanalys hamta-data --antal 5
+```
+
+Ett enskilt bolag:
+
+```bash
+python -m aktieanalys hamta-data --bolag VOLV-B.ST CAST.ST
+```
+
+Data som är nyare än `data.cache_dagar` (standard: 1 dag) hämtas inte
+igen utan tas ur databasen. Vill du tvinga om en hämtning:
+
+```bash
+python -m aktieanalys hamta-data --tvinga
+```
+
+Kommandot avslutas med en täckningstabell: för varje nyckeltal, hur
+många bolag som har det och hur många som saknar det. Det är där du ser
+vad som behöver fyllas i för hand.
+
+Se allt databasen vet om ett bolag, med källa för varje siffra och en
+rad per mått som visar om måttet går att räkna:
+
+```bash
+python -m aktieanalys visa-bolag VOLV-B.ST
+```
+
+Se vad vi visste ett visst datum -- samma punkt-i-tiden-läsning som
+backtestet använder:
+
+```bash
+python -m aktieanalys visa-bolag VOLV-B.ST --datum 2026-11-13
+```
+
+Statistik över databasen:
+
+```bash
+python -m aktieanalys visa-databas
+```
+
+---
+
+## Fylla i det som saknas för hand
+
+Åtta nyckeltal finns inte i yfinance och går inte att räkna fram. Utan
+dem kan fastighetsbolag, investmentbolag och banker inte bedömas
+rättvist. De fyller du i i `data/manuellt/`:
+
+| Fil | För vilka | Vad du fyller i |
+|---|---|---|
+| `substansvarden.csv` | Investmentbolag, fastighet | substansvärde per aktie, och totalt |
+| `fastighetsdata.csv` | Fastighet | förvaltningsresultat per aktie, belåningsgrad, räntetäckningsgrad |
+| `bankdata.csv` | Bank/finans | kärnprimärkapitalrelation (CET1) |
+
+Formatet är en rad per bolag och år:
+
+```
+ticker,ar,substansvarde_per_aktie
+INVE-B.ST,2025,385.50
+INVE-B.ST,2024,342.10
+INVE-B.ST,2023,298.40
+```
+
+Filerna går att öppna i Excel, Numbers eller Google Sheets -- spara som
+CSV. Kolumnen `ar` är det räkenskapsår uppgiften gäller. Systemet bygger
+två saker av varje kolumn: historiken (alla år) och senaste årets värde.
+Minst 3 år behövs för de mått som mäter utveckling över tid.
+
+Fyra regler, som alla ger tydliga felmeddelanden om du bryter dem:
+
+* **Punkt som decimaltecken**, inga tusenavskiljare: `385.50`. Komma
+  fungerar också, men punkt är säkrare.
+* **Andelar skrivs som andelar:** belåningsgrad 45 procent skrivs `0.45`,
+  inte `45`.
+* **Tom cell betyder "uppgift saknas"** -- aldrig noll. Vet du inte, lämna
+  tomt.
+* **Ett bolag och år per rad.** Står samma kombination två gånger stoppas
+  körningen.
+
+Du behöver bara fylla i de bolag du faktiskt vill kunna jämföra. Ett
+fastighetsbolag utan förvaltningsresultat utesluts ur sin kategori och
+listas i rapporten med orsak -- det får aldrig en gissad siffra.
+
+---
+
+## Databasen
+
+`data/cache.sqlite` har två roller samtidigt:
+
+**Cache.** Data som hämtats nyligen hämtas inte igen. yfinance är
+inofficiellt och tål inte att pressas.
+
+**Arkiv.** Varje hämtning sparas med datum och skrivs aldrig över.
+Frågar man databasen "vad visste vi den 3 maj?" får man svaret som
+gällde då, inte dagens siffror. Det är den enda delen av projektet som
+inte går att återskapa -- **radera den aldrig.** Den ligger med i
+repot med flit.
+
+Fyra tabeller: `fundamenta` (ett värde per bolag, fält och hämtdatum),
+`kurser` (daglig stängningskurs), `saknat` (vad som saknades och varför)
+och `hamtlogg` (varje hämtningsförsök och hur det gick).
+
+---
+
+## Byta datakälla senare
+
+Hela datalagret ligger bakom ett gränssnitt. Vill du gå över till
+Börsdata eller ett eget Google Sheets-flöde skriver du en klass som
+ärver `Provider` och fyller samma fält:
+
+```python
+from aktieanalys.data.provider import Provider
+
+class BorsdataProvider(Provider):
+    namn = "borsdata"
+
+    def hamta(self, ticker, idag=None):
+        ...   # fyll ett Bolagsdata
+```
+
+Poängmodellen, bytesreglerna och rapporten rörs inte. Fältnamnen som
+ska fyllas står i `src/aktieanalys/data/bolagsdata.py`.
+
+Tre regler varje datakälla måste följa: höj aldrig ett undantag utåt
+(ett trasigt bolag får inte stoppa veckokörningen), gissa aldrig
+(saknade värden markeras med orsak), och ange källa för varje fält.
 
 ---
 
