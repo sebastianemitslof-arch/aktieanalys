@@ -1,0 +1,63 @@
+# =====================================================================
+#  DIN PORTFÖLJ -- nuvarande innehav
+# =====================================================================
+#  Ett innehav per kategori. Kategorinamnen måste stavas exakt som i
+#  universum.yaml, och tickern måste finnas i den kategorins lista.
+#
+#  kopdatum används av regeln om minsta innehavstid. Sätt det datum du
+#  faktiskt köpte -- inte dagens datum -- annars tror systemet att
+#  innehavet är nytt och spärrar byten i onödan.
+#
+#  Fyller du i "antal" och "anskaffningskurs" kan rapporten räkna
+#  kostnaden för ett byte i kronor i stället för i procent. Lämna dem
+#  som 0 om du inte vill det.
+#
+#  En tom kategori (ticker: "") betyder "inget innehav än". Då
+#  föreslår rapporten ett förstagångsköp i stället för ett byte.
+#
+#  Format för datum: 2024-03-15  (år-månad-dag)
+# =====================================================================
+
+innehav:
+
+  Industri:
+    ticker: ""
+    kopdatum: ""
+    antal: 0
+    anskaffningskurs: 0
+
+  Bank/finans:
+    ticker: ""
+    kopdatum: ""
+    antal: 0
+    anskaffningskurs: 0
+
+  Investmentbolag:
+    ticker: ""
+    kopdatum: ""
+    antal: 0
+    anskaffningskurs: 0
+
+  Halsovard:
+    ticker: ""
+    kopdatum: ""
+    antal: 0
+    anskaffningskurs: 0
+
+  Konsument:
+    ticker: ""
+    kopdatum: ""
+    antal: 0
+    anskaffningskurs: 0
+
+  Teknik:
+    ticker: ""
+    kopdatum: ""
+    antal: 0
+    anskaffningskurs: 0
+
+  Fastighet:
+    ticker: ""
+    kopdatum: ""
+    antal: 0
+    anskaffningskurs: 0

@@ -1,0 +1,257 @@
+# =====================================================================
+#  HUVUDKONFIGURATION
+# =====================================================================
+#  Det här är filen du ändrar i. Allt som styr analysen står här --
+#  ingenting är gömt i koden.
+#
+#  Regler för filen:
+#   * Indraget (mellanslagen i början av raderna) betyder något. Behåll det.
+#   * Text efter # är en kommentar och ignoreras.
+#   * Decimaltal skrivs med punkt: 0.25, inte 0,25.
+#   * Stavar du fel på en inställning säger programmet till med en gång.
+#     Kör alltid:  python -m aktieanalys kontrollera-config
+#     efter att du ändrat något.
+# =====================================================================
+
+
+# ---------------------------------------------------------------------
+#  UNIVERSUM -- vilka bolag som får vara med
+# ---------------------------------------------------------------------
+universum:
+  # Bolag mindre än så här stängs ute. Sänk för att få med fler mindre
+  # bolag, höj för att hålla dig till de största.
+  min_borsvarde_mdr: 5.0
+
+  # Hur mycket som måste handlas i aktien en genomsnittlig dag. Skydd mot
+  # att hamna i aktier du inte kommer ur utan att själv flytta kursen.
+  min_daglig_omsattning_mkr: 10.0
+
+  # Antal handelsdagar som omsättningen mäts över (ca 3 månader).
+  handelsdagar_for_omsattning: 60
+
+  # Hur många nyckeltal ett bolag får sakna innan det utesluts helt.
+  # Uteslutna bolag listas alltid i veckorapporten med orsak -- de
+  # försvinner aldrig tyst.
+  max_saknade_matt_per_bolag: 2
+
+
+# ---------------------------------------------------------------------
+#  POÄNGMODELLEN -- hur bolagen rangordnas
+# ---------------------------------------------------------------------
+#  Varje bolag jämförs bara med bolag i SIN EGEN kategori. Ett
+#  fastighetsbolag ställs aldrig mot ett läkemedelsbolag.
+#  Poängen räknas i två steg:
+#    1. Varje mått görs om till percentilrank 0--100 inom kategorin.
+#    2. Ranken vägs samman: först inom varje pelare, sedan mellan pelarna.
+# ---------------------------------------------------------------------
+poang:
+  # Hur mycket de fyra benen väger. MÅSTE summera till 1.0.
+  # Vill du luta mer mot värde: höj vardering, sänk momentum.
+  vikter:
+    kvalitet: 0.30
+    vardering: 0.30
+    finansiell_styrka: 0.15
+    momentum: 0.25
+
+  # Hur många år bakåt som används för historiska jämförelser
+  # (marginalstabilitet, egen värderingshistorik).
+  antal_ar_historik: 5
+
+  # Finns färre än så här många bolag med data för ett mått i en
+  # kategori hoppas måttet över -- en percentilrank bland två bolag
+  # säger ingenting.
+  min_bolag_for_rank: 4
+
+  # -------------------------------------------------------------------
+  #  MÅTTUPPSÄTTNINGAR
+  # -------------------------------------------------------------------
+  #  Olika branscher mäts med olika mått. Varje kategori i
+  #  universum.yaml pekar ut vilken uppsättning den ska använda.
+  #  Vikterna inom varje pelare MÅSTE summera till 1.0.
+  #  Du kan bara använda mått som finns i måttkatalogen; kör
+  #  "python -m aktieanalys visa-matt" för att se hela listan.
+  # -------------------------------------------------------------------
+  mattuppsattningar:
+
+    # Vanliga bolag: industri, hälsovård, konsument, teknik.
+    standard:
+      kvalitet:
+        roic: 0.60
+        rorelsemarginal_stabilitet_5ar: 0.40
+      vardering:
+        ev_ebit: 0.45
+        pe: 0.25
+        ev_ebit_mot_egen_historik: 0.30
+      finansiell_styrka:
+        nettoskuld_ebitda: 1.00
+      momentum:
+        momentum_12m_exkl_1m: 1.00
+
+    # Banker. EV/EBIT och nettoskuld är meningslösa för en bank --
+    # inlåning är inte "skuld" i den bemärkelsen.
+    bank:
+      kvalitet:
+        roe: 0.60
+        vinststabilitet_5ar: 0.40
+      vardering:
+        p_b: 0.60
+        pe: 0.40
+      finansiell_styrka:
+        kapitalstyrka: 1.00
+      momentum:
+        momentum_12m_exkl_1m: 1.00
+
+    # Fastighetsbolag. Redovisad vinst svänger med orealiserade
+    # värdeförändringar, därför används förvaltningsresultatet i stället.
+    fastighet:
+      kvalitet:
+        forvaltningsresultat_per_aktie_tillvaxt: 1.00
+      vardering:
+        kurs_mot_substans: 0.55
+        kurs_mot_forvaltningsresultat: 0.45
+      finansiell_styrka:
+        belaningsgrad: 0.50
+        rantetackningsgrad: 0.50
+      momentum:
+        momentum_12m_exkl_1m: 1.00
+
+    # Investmentbolag. Värderas mot substansvärdet, inte mot vinsten.
+    investmentbolag:
+      kvalitet:
+        substansvarde_tillvaxt: 1.00
+      vardering:
+        substansrabatt_mot_historik: 1.00
+      finansiell_styrka:
+        skuldsattning_mot_substans: 1.00
+      momentum:
+        momentum_12m_exkl_1m: 1.00
+
+
+# ---------------------------------------------------------------------
+#  KVALITATIVT LAGER -- Claude läser rapporter och nyheter
+# ---------------------------------------------------------------------
+#  Claude får BARA flagga risker och justera poängen några procent.
+#  Claude får aldrig föreslå ett bolag som poängmodellen inte redan
+#  rangordnat högt. Svaret valideras som JSON; håller det inte formatet
+#  används den rena sifferpoängen i stället.
+# ---------------------------------------------------------------------
+kvalitativt:
+  aktiverat: true
+
+  # Stäng av med "aktiverat: false", eller kör med flaggan --utan-llm
+  # för en enskild körning. Kräver en API-nyckel i miljövariabeln
+  # ANTHROPIC_API_KEY.
+  modell: claude-sonnet-5-5
+
+  # Hur mycket Claude högst får flytta ett bolags poäng, uppåt eller
+  # nedåt. 0.10 = tio procent.
+  max_justering: 0.10
+
+  # Hur många utmanare per kategori som skickas till Claude. Nuvarande
+  # innehav skickas alltid, oavsett placering.
+  antal_utmanare: 3
+
+  # Tak för hur många nyhetsrubriker per bolag som skickas med.
+  max_nyheter_per_bolag: 8
+
+
+# ---------------------------------------------------------------------
+#  BYTESREGLER -- när ett byte alls får föreslås
+# ---------------------------------------------------------------------
+#  Alla villkor måste uppfyllas samtidigt. Syftet är låg omsättning:
+#  ett byte ska vara ett undantag, inte en veckovana.
+# ---------------------------------------------------------------------
+byten:
+  # Hur mycket bättre utmanaren måste vara. 20 = tjugo procent högre
+  # totalpoäng än innehavet.
+  min_poangforbattring_procent: 20.0
+
+  # Och den måste vara det så här många veckorapporter i rad. Skyddar
+  # mot att jaga brus.
+  antal_veckor_i_rad: 3
+
+  # Innehavet måste ha ägts minst så här länge.
+  min_innehavstid_manader: 12
+
+  # Undantag: vid flaggad fundamental försämring (vinstvarning och
+  # liknande) får både innehavstid och veckokrav åsidosättas.
+  tillat_undantag_vid_riskflagga: true
+
+  # Byten föreslås bara inom beslutsfönstren nedan. Övriga veckor är
+  # rapporten enbart bevakning.
+  endast_byten_i_beslutsfonster: true
+
+  # Fönstren ligger efter de svenska rapportperioderna, så att besluten
+  # bygger på färsk information. Format: MM-DD.
+  beslutsfonster:
+    - fran: "02-15"   # efter bokslutsrapporterna
+      till: "03-15"
+    - fran: "05-15"   # efter Q1
+      till: "06-15"
+    - fran: "08-15"   # efter halvårsrapporterna
+      till: "09-15"
+    - fran: "11-15"   # efter Q3
+      till: "12-15"
+
+
+# ---------------------------------------------------------------------
+#  KOSTNADER -- vad ett byte kostar
+# ---------------------------------------------------------------------
+kostnader:
+  # Courtage enligt Avanza/Nordnet Mini: 0,25 % av beloppet, men
+  # minst 1 krona. Betalas vid både försäljning och köp.
+  courtage_procent: 0.25
+  courtage_min_kr: 1.0
+
+  # Skillnaden mellan köp- och säljkurs. Räknas ur verklig kursdata när
+  # den finns, annars används den här nivån som lägsta antagande.
+  spread_golv_procent: 0.15
+
+  # Kontot är ett ISK: ingen vinstskatt vid försäljning, så den räknas
+  # inte in i bytets kostnad.
+  isk: true
+
+
+# ---------------------------------------------------------------------
+#  VECKORAPPORTEN
+# ---------------------------------------------------------------------
+rapport:
+  spara_fil: true
+  katalog: rapporter
+
+  skicka_mejl: true
+  mejl:
+    # Fylls i i steg 7. Lösenordet ska ALDRIG stå i den här filen --
+    # det läses ur miljövariabeln SMTP_LOSENORD.
+    till: ""
+    fran: ""
+    smtp_server: smtp.gmail.com
+    smtp_port: 587
+
+
+# ---------------------------------------------------------------------
+#  DATAHÄMTNING
+# ---------------------------------------------------------------------
+data:
+  # All hämtad data sparas här, med datum. Filen växer sakta och blir
+  # din egen historikdatabas -- radera den inte.
+  databas: data/cache.sqlite
+
+  # Här lägger du CSV-filerna med uppgifter yfinance inte har.
+  manuell_katalog: data/manuellt
+
+  # Data som är nyare än så här många dagar hämtas inte igen.
+  cache_dagar: 1
+
+  # yfinance är inofficiellt och svarar ibland tomt. Då görs nya försök.
+  max_forsok: 3
+  paus_mellan_forsok_sek: 2.0
+
+
+# ---------------------------------------------------------------------
+#  LOGGNING
+# ---------------------------------------------------------------------
+loggning:
+  # DEBUG ger mycket detaljer, INFO det normala, WARNING bara problem.
+  niva: INFO
+  fil: data/korning.log

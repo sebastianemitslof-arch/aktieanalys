@@ -1,0 +1,219 @@
+# Aktieanalys -- beslutsstöd för en liten svensk portfölj
+
+Ett verktyg som varje vecka analyserar en portfölj med sju svenska bolag,
+ett per kategori, och mejlar en rapport. Det är ett komplement till en
+global indexfond.
+
+**Programmet handlar aldrig åt dig.** Det hämtar data, räknar poäng,
+flaggar risker och föreslår. Alla beslut, alla order, fattar du själv.
+
+---
+
+## Vad som är byggt så här långt
+
+Projektet byggs i nio steg. Just nu är **steg 1 klart**: strukturen och
+konfigurationen.
+
+| Steg | Innehåll | Status |
+|------|----------|--------|
+| 1 | Projektstruktur, konfiguration, validering | **klart** |
+| 2 | Datalager: yfinance, SQLite-cache, CSV-komplettering | kommer |
+| 3 | Universum: filtrering och datatäckningskontroll | kommer |
+| 4 | Poängmodellen | kommer |
+| 5 | Kvalitativt lager (Claude) | kommer |
+| 6 | Bytesregler och kostnadsberäkning | kommer |
+| 7 | Veckorapport som HTML och mejl | kommer |
+| 8 | Schemaläggning via GitHub Actions | kommer |
+| 9 | Backtest mot OMXS30 | kommer |
+
+---
+
+## Komma igång
+
+Du behöver Python 3.11 eller senare. Kontrollera med `python3 -V`.
+
+Installera programmet. Punkten på slutet betyder "det som finns i den
+här mappen" och ska vara med:
+
+```bash
+pip install -e .
+```
+
+Kontrollera att allt hänger ihop:
+
+```bash
+python -m aktieanalys kontrollera-config
+```
+
+Du ska få en sammanfattning av dina inställningar. Får du ett
+felmeddelande står det vilken fil och vilken rad-nyckel som är fel.
+
+---
+
+## Kommandon
+
+Kontrollera konfigurationen och visa den i sammanfattning. **Kör det här
+varje gång du ändrat i en YAML-fil** -- det tar en sekund och fångar
+stavfel innan de blir felaktiga analyser:
+
+```bash
+python -m aktieanalys kontrollera-config
+```
+
+Lista alla nyckeltal som får användas, med förklaring av vad varje mäter
+och om högt eller lågt är bra:
+
+```bash
+python -m aktieanalys visa-matt
+```
+
+Visa kategorierna med bolag och vilka mått de bedöms på:
+
+```bash
+python -m aktieanalys visa-universum
+```
+
+Kör testerna (42 stycken just nu). Gör det efter varje ändring i koden:
+
+```bash
+pytest
+```
+
+---
+
+## Filerna du ändrar i
+
+All styrning ligger i tre textfiler i mappen `config/`. Inget är
+hårdkodat. Filerna är fullständigt kommenterade -- öppna dem i vilken
+textredigerare som helst.
+
+### `config/config.yaml` -- hur analysen räknar
+
+Här bor vikter, gränsvärden, bytesregler, courtage och mejlinställningar.
+De vanligaste ändringarna:
+
+| Vill du... | Ändra |
+|---|---|
+| lägga mer vikt på billiga bolag | `poang.vikter.vardering` upp, `momentum` ner |
+| byta oftare | `byten.min_poangforbattring_procent` ner från 20 |
+| få med mindre bolag | `universum.min_borsvarde_mdr` ner från 5.0 |
+| stänga av Claude-lagret | `kvalitativt.aktiverat: false` |
+| ändra courtage | `kostnader.courtage_procent` |
+
+Två regler gäller för vikterna, och programmet säger till om du bryter dem:
+
+* `poang.vikter` måste summera till `1.0`
+* vikterna inom varje pelare i en måttuppsättning måste summera till `1.0`
+
+### `config/universum.yaml` -- bolagen och kategorierna
+
+Sju kategorier med 90 bolag. Lägg till ett bolag genom att skriva en ny
+rad med `- TICKER.ST` under rätt kategori. Ta bort genom att radera
+raden, eller sätt `#` framför för att tillfälligt stänga av den.
+
+Tickern är Yahoo Finance-beteckningen; svenska aktier slutar på `.ST`.
+Hittar du inte en ticker: sök på bolagsnamnet på finance.yahoo.com och
+titta i adressfältet.
+
+Bolagslistan är ett förslag att utgå från, och enstaka tickers kan vara
+fel. Datatäckningskontrollen i steg 3 testar varje ticker mot Yahoo och
+talar om exakt vilka som inte svarar.
+
+### `config/portfolj.yaml` -- dina innehav
+
+Ett innehav per kategori, med köpdatum. Köpdatumet styr regeln om
+minsta innehavstid, så sätt det datum du **faktiskt köpte** -- inte
+dagens datum, annars tror systemet att innehavet är nytt och spärrar
+byten i onödan.
+
+Tom portfölj är ett giltigt utgångsläge. Då föreslår rapporten
+förstagångsköp i stället för byten.
+
+---
+
+## Så är det byggt
+
+Fem lager. Varje lager känner bara till lagret ovanför genom ett bestämt
+gränssnitt, vilket är det som gör att datakällan går att byta ut utan
+att poängmodellen rörs.
+
+```
+  1. DATAKÄLLA      yfinance  ·  CSV-komplettering  ·  [senare: Börsdata]
+  2. UNIVERSUM      filtrera storlek/omsättning  ->  kategorisera  ->  datatäckning
+  3. POÄNGMODELL    percentilrank inom kategori, sektorsanpassade mått
+  4. KVALITATIVT    Claude flaggar risker, justerar högst ±10 %
+  5. BESLUT         bytesregler, kostnad  ->  HTML-rapport och mejl
+```
+
+### Mappar
+
+```
+config/     de tre filerna du ändrar i
+data/       databasen (cache.sqlite) och dina CSV-filer
+rapporter/  veckorapporterna som HTML, en per vecka
+src/        programkoden
+tests/      testerna
+```
+
+### Tre principer som koden följer
+
+**Saknad data blir aldrig noll.** Om ett nyckeltal inte finns markeras
+det som saknat och bolaget räknas som att det saknar det måttet. En nolla
+skulle se ut som "sämst i klassen", vilket är ett helt annat påstående än
+"vi vet inte". Bolag som saknar mer än `max_saknade_matt_per_bolag`
+nyckeltal utesluts, och **listas alltid i rapporten med orsak**.
+
+**Allt som hämtas sparas med datum.** Databasen `data/cache.sqlite` är
+både cache och arkiv. Den gör att yfinance inte anropas i onödan, och den
+bygger med tiden upp en historik över vad som faktiskt var känt vid varje
+tidpunkt.
+
+**Claude får bara justera, aldrig välja.** Språkmodellen ser bara de
+bolag poängmodellen redan rangordnat högt, och får flytta poängen högst
+±10 %. Den kan inte föreslå ett bolag utanför modellen. Svaret valideras
+som JSON; håller det inte formatet används den rena sifferpoängen.
+
+---
+
+## Om något går fel
+
+**`ModuleNotFoundError: No module named 'aktieanalys'`**
+Du står i fel mapp, eller har inte kört `pip install -e .`. Gå till
+projektmappen och kör installationen igen.
+
+**`Hittar inte konfigurationsfilen ...`**
+Kommandot letar efter `config/` i mappen du står i. Gå till
+projektmappen, eller peka ut katalogen: `--config /sökväg/till/config`.
+
+**`... går inte att läsa som YAML`**
+Nästan alltid indraget. Använd mellanslag, aldrig tabbar, och håll samma
+antal mellanslag som på raderna runt om.
+
+**`okänd inställning -- kontrollera stavningen`**
+Du har skrivit ett inställningsnamn som inte finns. Meddelandet säger
+vilket. Jämför med kommentarerna i filen.
+
+Loggen från senaste körningen ligger i `data/korning.log` och innehåller
+mer detaljer än det som skrivs på skärmen.
+
+---
+
+## Begränsningar du bör känna till
+
+**yfinance är en inofficiell datakälla.** Den kan svara tomt, långsamt
+eller med fel. Programmet gör om försök och loggar problem, men enstaka
+nyckeltal kommer att saknas för enstaka bolag. Rapporten visar alltid
+vad som saknades.
+
+**Vissa uppgifter finns inte alls i yfinance** och måste fyllas i för
+hand i CSV-filer i `data/manuellt/`: substansvärden för investmentbolag,
+förvaltningsresultat och belåningsgrad för fastighetsbolag,
+kapitaltäckning för banker. Det byggs i steg 2.
+
+**Backtestet blir approximativt.** yfinance levererar inte historiska
+fundamenta med uppgift om *när* de offentliggjordes, och bara fyra till
+fem år bakåt. Kursdata är korrekt historisk, men för nyckeltalen används
+en konservativ rapportfördröjning som antagande. Backtestet är därför en
+rimlighetskontroll av reglerna, inte ett bevis för att de fungerar. Från
+och med nu sparas däremot varje veckas data med datum, så med tiden
+byggs en historik upp som går att lita på.

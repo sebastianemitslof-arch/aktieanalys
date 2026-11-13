@@ -1,0 +1,146 @@
+# =====================================================================
+#  UNIVERSUM -- bolagen som analyseras, grupperade i kategorier
+# =====================================================================
+#  Portföljen ska hålla ETT bolag per kategori. Alla bolag i en kategori
+#  rangordnas bara mot varandra.
+#
+#  "mattuppsattning" pekar ut vilka nyckeltal kategorin bedöms på.
+#  De uppsättningarna definieras i config.yaml.
+#
+#  Tickern är Yahoo Finance-beteckningen. Svenska aktier slutar på .ST.
+#  Är flera aktieslag noterade (A- och B-aktier) ska bara det mest
+#  handlade tas med -- annars konkurrerar bolaget med sig självt.
+#
+#  VIKTIGT: listan nedan är ett förslag att utgå från. Enstaka tickers
+#  kan vara felstavade eller avnoterade. I steg 3 bygger vi
+#  datatäckningskontrollen, som testar varenda ticker mot Yahoo och
+#  talar om exakt vilka som inte svarar. Då rättar vi listan mot facit
+#  i stället för mot gissningar. Bolag under gränserna för börsvärde
+#  eller omsättning sorteras bort automatiskt -- de kan stå kvar här.
+#
+#  Lägga till ett bolag: skriv en ny rad med "- TICKER.ST" under rätt
+#  kategori. Ta bort: radera raden (eller sätt # först för att
+#  tillfälligt stänga av den).
+# =====================================================================
+
+kategorier:
+
+  Industri:
+    mattuppsattning: standard
+    bolag:
+      - ATCO-A.ST      # Atlas Copco
+      - SAND.ST        # Sandvik
+      - VOLV-B.ST      # Volvo
+      - SKF-B.ST       # SKF
+      - ALFA.ST        # Alfa Laval
+      - EPI-A.ST       # Epiroc
+      - ASSA-B.ST      # Assa Abloy
+      - NIBE-B.ST      # Nibe
+      - INDT.ST        # Indutrade
+      - LIFCO-B.ST     # Lifco
+      - ADDT-B.ST      # Addtech
+      - SAAB-B.ST      # Saab
+      - TREL-B.ST      # Trelleborg
+      - BEIJ-B.ST      # Beijer Ref
+      - SECU-B.ST      # Securitas
+      - SKA-B.ST       # Skanska
+
+  Bank/finans:
+    mattuppsattning: bank
+    bolag:
+      - SEB-A.ST       # SEB
+      - SHB-A.ST       # Handelsbanken
+      - SWED-A.ST      # Swedbank
+      - NDA-SE.ST      # Nordea
+      - AZA.ST         # Avanza
+      - SAVE.ST        # Nordnet
+      - RESURS.ST      # Resurs Holding
+      - NORION.ST      # Norion Bank
+
+  Investmentbolag:
+    mattuppsattning: investmentbolag
+    bolag:
+      - INVE-B.ST      # Investor
+      - INDU-C.ST      # Industrivarden
+      - LATO-B.ST      # Latour
+      - LUND-B.ST      # Lundbergforetagen
+      - KINV-B.ST      # Kinnevik
+      - SVOL-B.ST      # Svolder
+      - CRED-A.ST      # Creades
+      - BURE.ST        # Bure Equity
+      - TRAC-B.ST      # Traction
+      - ORES.ST        # Investment AB Oresund
+
+  Halsovard:
+    mattuppsattning: standard
+    bolag:
+      - AZN.ST         # AstraZeneca
+      - SOBI.ST        # Swedish Orphan Biovitrum
+      - GETI-B.ST      # Getinge
+      - EKTA-B.ST      # Elekta
+      - ARJO-B.ST      # Arjo
+      - ALIF-B.ST      # AddLife
+      - VITR.ST        # Vitrolife
+      - BIOG-B.ST      # BioGaia
+      - MCOV-B.ST      # Medicover
+      - AMBEA.ST       # Ambea
+      - ATT.ST         # Attendo
+      - XVIVO.ST       # Xvivo Perfusion
+
+  Konsument:
+    mattuppsattning: standard
+    bolag:
+      - HM-B.ST        # Hennes & Mauritz
+      - ESSITY-B.ST    # Essity
+      - AXFO.ST        # Axfood
+      - ELUX-B.ST      # Electrolux
+      - HUSQ-B.ST      # Husqvarna
+      - DOM.ST         # Dometic
+      - THULE.ST       # Thule
+      - CLAS-B.ST      # Clas Ohlson
+      - MIPS.ST        # Mips
+      - FOI-B.ST       # Fenix Outdoor
+      - SHOT.ST        # Scandic Hotels
+      - EVO.ST         # Evolution
+      - BETS-B.ST      # Betsson
+      - AAK.ST         # AAK
+      - BOOZT.ST       # Boozt
+
+  # Telia och Tele2 är strikt sett telekom, men med sju kategorier hör
+  # de hemma här. Flytta dem om du hellre vill ha dem för sig.
+  Teknik:
+    mattuppsattning: standard
+    bolag:
+      - ERIC-B.ST      # Ericsson
+      - HEXA-B.ST      # Hexagon
+      - TELIA.ST       # Telia
+      - TEL2-B.ST      # Tele2
+      - SINCH.ST       # Sinch
+      - TIETOS.ST      # TietoEVRY
+      - PDX.ST         # Paradox Interactive
+      - EMBRAC-B.ST    # Embracer
+      - VIT-B.ST       # Vitec
+      - LIME.ST        # Lime Technologies
+      - KNOW.ST        # Knowit
+      - TRUE-B.ST      # Truecaller
+      - ENEA.ST        # Enea
+
+  Fastighet:
+    mattuppsattning: fastighet
+    bolag:
+      - CAST.ST        # Castellum
+      - BALD-B.ST      # Balder
+      - FABG.ST        # Fabege
+      - WALL-B.ST      # Wallenstam
+      - HUFV-A.ST      # Hufvudstaden
+      - SAGA-B.ST      # Sagax
+      - WIHL.ST        # Wihlborgs
+      - DIOS.ST        # Dios
+      - PLAZ-B.ST      # Platzer
+      - ATRLJ-B.ST     # Atrium Ljungberg
+      - NP3.ST         # NP3 Fastigheter
+      - CATE.ST        # Catena
+      - NYF.ST         # Nyfosa
+      - PNDX-B.ST      # Pandox
+      - CORE-B.ST      # Corem Property
+      - SBB-B.ST       # Samhallsbyggnadsbolaget

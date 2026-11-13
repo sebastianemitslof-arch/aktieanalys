@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aktieanalys"
+version = "0.1.0"
+description = "Beslutsstöd för en liten portfölj med svenska bolag"
+requires-python = ">=3.11"
+dependencies = [
+    "yfinance>=0.2.40",   # kurser, volymer, fundamenta (inofficiell källa)
+    "pandas>=2.0",        # tabeller och percentilrank
+    "PyYAML>=6.0",        # konfigurationsfilerna
+    "pydantic>=2.0",      # validerar config och Claudes JSON-svar
+    "Jinja2>=3.1",        # HTML-mallen för veckorapporten
+    "anthropic>=0.40",    # det kvalitativa lagret
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

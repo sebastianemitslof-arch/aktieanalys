@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Hemligheter -- ska aldrig in i repot
+.env
+*.key
+
+# OBS: data/cache.sqlite är med i repot MED FLIT.
+# Det är där historiken byggs upp, och GitHub Actions behöver kunna
+# läsa och skriva den mellan körningarna. Lägg den inte här.
