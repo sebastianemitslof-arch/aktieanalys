@@ -23,7 +23,7 @@ import pandas as pd
 
 from aktieanalys.data.bolagsdata import Bolagsdata
 from aktieanalys.data.provider import Provider
-from aktieanalys.data.valuta import Valutaomraknare
+from aktieanalys.data.valuta import Valutaomraknare, naiva_datum
 from aktieanalys.logg import hamta
 
 logg = hamta(__name__)
@@ -227,10 +227,23 @@ class YfinanceProvider(Provider):
             )
         self._kontrollera_valuta(bd)
 
+        # Regel 1 i provider-kontraktet: höj aldrig ett undantag utåt.
+        # Ett oväntat fel i tolkningen av Yahoos svar får stoppa ETT
+        # bolag, aldrig hela veckokörningen. Det som hunnit sättas
+        # behålls; resten markeras saknat av _markera_resten_saknat.
         vaxling = _Vaxling(bd, bd.rapportvaluta, self.valutaomraknare)
-        self._marknadsdata(bd, info, historik)
-        self._resultatdata(bd, info, resultat, vaxling)
-        self._balansdata(bd, info, balans, vaxling)
+        for namn, steg in (
+            ("marknadsdata", lambda: self._marknadsdata(bd, info, historik)),
+            ("resultaträkning", lambda: self._resultatdata(bd, info, resultat, vaxling)),
+            ("balansräkning", lambda: self._balansdata(bd, info, balans, vaxling)),
+        ):
+            try:
+                steg()
+            except Exception as e:
+                logg.exception("%s: oväntat fel vid tolkning av %s", ticker, namn)
+                bd.anteckna_fel(
+                    f"oväntat fel vid tolkning av {namn}: {type(e).__name__}: {e}"
+                )
         self._markera_resten_saknat(bd)
         return bd
 
@@ -285,7 +298,7 @@ class YfinanceProvider(Provider):
             bd.markera_saknat("daglig_omsattning", "kräver kurshistorik")
             return
 
-        stangning = historik["Close"].dropna()
+        stangning = naiva_datum(historik["Close"].dropna())
         if len(stangning) < 30:
             bd.markera_saknat(
                 "kurshistorik",

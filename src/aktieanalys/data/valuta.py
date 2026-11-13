@@ -34,6 +34,29 @@ logg = hamta(__name__)
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
 
+def naiva_datum(serie: pd.Series) -> pd.Series:
+    """Tar bort tidszon och klockslag ur en tidsseries index.
+
+    Yahoo märker olika serier med olika tidszoner: svenska aktier med
+    Europe/Stockholm, valutapar med Europe/London. Pandas vägrar jämföra
+    ett tidszonsmärkt index med ett omärkt datum och höjer TypeError --
+    vilket tog ner en hel veckokörning innan det här fanns. Allt
+    normaliseras därför till datum utan tidszon, vilket också är det
+    databasen lagrar.
+    """
+    if serie is None or len(serie) == 0:
+        return serie
+    index = pd.DatetimeIndex(serie.index)
+    if index.tz is not None:
+        # tz_localize(None) behåller den lokala väggklockan. Använder man
+        # tz_convert(None) räknas tiden om till UTC, och en svensk
+        # midnattsstämpel blir då föregående dag -- alla datum ett dygn fel.
+        index = index.tz_localize(None)
+    serie = serie.copy()
+    serie.index = index.normalize()
+    return serie
+
+
 class Valutaomraknare:
     """Hämtar och cachar valutakurser mot kronan.
 
@@ -110,7 +133,7 @@ class Valutaomraknare:
                 time.sleep(self.paus_sek)
                 continue
 
-            serie = df["Close"].dropna()
+            serie = naiva_datum(df["Close"].dropna())
             logg.info("hämtade %d valutakurser för %s", len(serie), namn)
             return serie
         return None
@@ -131,6 +154,7 @@ class Valutaomraknare:
         serie = self._serie(valuta)
         if serie is None or serie.empty:
             return None
+        serie = naiva_datum(serie)
 
         if ar is None:
             return float(serie.iloc[-1])

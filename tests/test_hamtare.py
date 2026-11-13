@@ -279,3 +279,26 @@ def test_valuta_overlever_i_databasen(inst):
         assert tillbaka.namn == "Nordea"
     finally:
         h.stang()
+
+
+def test_provider_som_hojer_undantag_stoppar_inte_korningen(inst):
+    """Sista skyddsnätet: höjer providern ett undantag ska de övriga
+    bolagen ändå hämtas och rapporten ändå gå ut."""
+    class Minerad(Provider):
+        namn = "minerad"
+
+        def hamta(self, ticker, idag=None, kand_meta=None):
+            if ticker == "SAND.ST":
+                raise TypeError("simulerad krasch i tolkningen")
+            bd = Bolagsdata(ticker=ticker, hamtad=idag or IDAG, namn=ticker)
+            bd.satt("kurs", 100.0, "minerad")
+            return bd
+
+    h = bygg(inst, Minerad())
+    try:
+        rapport = h.hamta(["VOLV-B.ST", "SAND.ST", "SKF-B.ST"], idag=IDAG)
+        assert rapport.nyhamtade == ["VOLV-B.ST", "SKF-B.ST"]
+        assert "simulerad krasch" in rapport.utan_svar["SAND.ST"]
+        assert rapport.antal == 2
+    finally:
+        h.stang()

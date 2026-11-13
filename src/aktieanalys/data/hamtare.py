@@ -112,7 +112,17 @@ class Hamtare:
         paus = self.inst.config.data.paus_mellan_bolag_sek
         for nr, ticker in enumerate(tickers, start=1):
             logg.info("[%d/%d] %s", nr, len(tickers), ticker)
-            bd = self._ett_bolag(ticker, idag, tvinga, cache_dagar, rapport)
+            try:
+                bd = self._ett_bolag(ticker, idag, tvinga, cache_dagar, rapport)
+            except Exception as e:
+                # Sista skyddsnätet. Går något oväntat fel -- i providern,
+                # i databasen eller i CSV-påläggningen -- ska de övriga
+                # bolagen ändå hämtas och veckorapporten ändå gå ut.
+                logg.exception("%s: oväntat fel, hoppar över bolaget", ticker)
+                rapport.utan_svar[ticker] = (
+                    f"oväntat fel: {type(e).__name__}: {e}"
+                )
+                continue
             if bd is not None:
                 rapport.data[ticker] = bd
             if paus and nr < len(tickers):

@@ -486,3 +486,76 @@ def test_kand_meta_anvands_nar_yahoo_utelamnar_valutan():
 
     vaxling = _Vaxling(bd, bd.rapportvaluta, Valutaomraknare(fasta_kurser=KURSER))
     assert vaxling.kand and vaxling.behovs
+
+
+# =====================================================================
+#  Tidszoner
+# =====================================================================
+def test_naiva_datum_behaller_ratt_dag():
+    """tz_convert hade flyttat svensk midnatt till föregående dag."""
+    from aktieanalys.data.valuta import naiva_datum
+
+    serie = pd.Series(
+        [100.0, 101.0],
+        index=pd.to_datetime(["2026-11-12", "2026-11-13"]).tz_localize("Europe/Stockholm"),
+    )
+    naken = naiva_datum(serie)
+    assert naken.index.tz is None
+    assert [d.date().isoformat() for d in naken.index] == ["2026-11-12", "2026-11-13"]
+
+
+def test_naiva_datum_ror_inte_omarkta_serier():
+    from aktieanalys.data.valuta import naiva_datum
+
+    serie = pd.Series([1.0], index=pd.to_datetime(["2026-11-13"]))
+    assert naiva_datum(serie).index.tz is None
+
+
+def test_naiva_datum_klarar_tom_serie():
+    from aktieanalys.data.valuta import naiva_datum
+
+    assert len(naiva_datum(pd.Series(dtype=float))) == 0
+
+
+def test_valutakurs_fungerar_med_tidszonsmarkt_serie():
+    """Det här felet tog ner en hel veckokörning: Yahoo märker
+    valutapar med Europe/London, aktier med Europe/Stockholm."""
+    from aktieanalys.data.valuta import naiva_datum
+
+    serie = pd.Series(
+        [10.0, 11.0],
+        index=pd.to_datetime(["2024-12-30", "2025-12-30"]).tz_localize("Europe/London"),
+    )
+    v = Valutaomraknare()
+    v._serier["EUR"] = serie          # som om den kom direkt från Yahoo
+    assert v.kurs("EUR", 2025) == 11.0
+    assert v.kurs("EUR", 2024) == 10.0
+
+
+def test_kurshistoriken_lagras_utan_tidszon():
+    p = YfinanceProvider()
+    bd = Bolagsdata(ticker="TEST.ST", hamtad=IDAG)
+    historik = kurshistorik(dagar=100)
+    historik.index = historik.index.tz_localize("Europe/Stockholm")
+    p._marknadsdata(bd, {"currentPrice": 100.0}, historik)
+    assert bd.varde("kurshistorik").index.tz is None
+
+
+# =====================================================================
+#  Ett trasigt bolag får inte stoppa veckokörningen
+# =====================================================================
+def test_ovantat_fel_i_tolkningen_stoppar_bara_bolaget(monkeypatch):
+    p = YfinanceProvider(max_forsok=1, paus_sek=0)
+
+    def kraschar(*a, **kw):
+        raise TypeError("simulerad pandas-krasch")
+
+    monkeypatch.setattr(p, "_balansdata", kraschar)
+    monkeypatch.setattr(p, "_forsok", lambda vad, anrop, bd: (
+        {"currency": "SEK", "financialCurrency": "SEK", "currentPrice": 100.0,
+         "longName": "Testbolaget"} if vad == "info" else None
+    ))
+
+    bd = p.hamta("TEST.ST", IDAG)   # ska INTE höja
+    assert any("simulerad pandas-krasch" in f for f in bd.fel)
+    assert bd.varde("kurs") == 100.0   # det som hann sättas finns kvar
