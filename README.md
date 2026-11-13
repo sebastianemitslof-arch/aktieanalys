@@ -310,6 +310,23 @@ kapital hade gjort Latour till Sveriges dyraste bolag. Investmentbolagens
 substansvärden måste komma från bolagens egen rapportering -- det är de
 18 talen i `data/manuellt/substansvarden.csv`.
 
+### När en härledning dras tillbaka
+
+Arkivet skriver medvetet aldrig över ett värde med ingenting -- det är
+rätt när datakällan missar något en vecka. Men det betyder också att en
+härledning som dras tillbaka, som förvaltningsresultatets historik,
+lämnar sina gamla proxyvärden kvar i databasen där de fortsätter
+användas. Rensa dem så här:
+
+```bash
+python -m aktieanalys rensa-harlett
+```
+
+Kommandot listar alla härledda värden i databasen och tar bort dem som
+ingen aktuell härledning längre producerar. Värden från yfinance och
+från dina CSV-filer är alltid orörda. Kör det om du ändrat något i
+härledningarna.
+
 ### Se vad som är proxyvärde
 
 ```bash

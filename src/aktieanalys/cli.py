@@ -306,6 +306,59 @@ def _visa_urval(args: argparse.Namespace) -> int:
     return 0
 
 
+def _rensa_harlett(args: argparse.Namespace) -> int:
+    """Tar bort proxyvärden som ingen härledning längre producerar.
+
+    Arkivet skriver aldrig över ett värde med ingenting, vilket är rätt
+    när datakällan missar något -- men det betyder också att en
+    HÄRLEDNING som dragits tillbaka lämnar sina gamla värden kvar.
+    """
+    from aktieanalys.data.harledda import HARLEDNINGAR
+    from aktieanalys.data.lager import Lager
+
+    inst = las_installningar(args.config)
+    logg.satt_upp(inst.config.loggning.niva, inst.loggfil)
+    if not inst.databasvag.exists():
+        print("Databasen finns inte än.")
+        return 1
+
+    aktuella = {h.falt for h in HARLEDNINGAR}
+    with Lager(inst.databasvag) as lager:
+        i_databasen = lager.harledda_falt()
+        if not i_databasen:
+            print("Databasen innehåller inga härledda värden.")
+            return 0
+
+        if args.falt:
+            if args.falt not in i_databasen:
+                print(f"{args.falt} har inga härledda värden i databasen.\n"
+                      f"Fält med härledda värden: {', '.join(i_databasen)}")
+                return 1
+            mal = [args.falt]
+        else:
+            mal = [f for f in i_databasen if f not in aktuella]
+
+        print("Härledda värden i databasen:")
+        for falt, antal in i_databasen.items():
+            status = "tas bort" if falt in mal else "behålls"
+            print(f"  {falt:42} {antal:4} rader   {status}")
+
+        if not mal:
+            print("\nInget att rensa -- alla härledda värden har en "
+                  "aktuell härledning.")
+            return 0
+
+        print()
+        borttagna = 0
+        for falt in mal:
+            n = lager.ta_bort_harledda(falt)
+            borttagna += n
+            print(f"Tog bort {n} härledda värden för {falt}.")
+        print(f"\nTotalt {borttagna} rader. Värden från yfinance och från "
+              f"CSV-filerna är orörda.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="python -m aktieanalys",
@@ -362,6 +415,15 @@ def main(argv: list[str] | None = None) -> int:
     p_urval.add_argument("--datum", metavar="ÅÅÅÅ-MM-DD",
                          help="gör urvalet med den data som fanns ett visst datum")
     p_urval.set_defaults(func=_visa_urval)
+
+    p_rensa = under.add_parser(
+        "rensa-harlett",
+        help="tar bort proxyvärden som ingen härledning längre producerar",
+    )
+    p_rensa.add_argument("--falt", metavar="FÄLT",
+                         help="rensa ett bestämt fält, t.ex. när en "
+                              "härlednings formel ändrats")
+    p_rensa.set_defaults(func=_rensa_harlett)
 
     args = p.parse_args(argv)
     logg.satt_upp()

@@ -359,6 +359,35 @@ class Lager:
             else 0,
         }
 
+    def harledda_falt(self) -> dict[str, int]:
+        """Fält som har härledda (proxy-)värden i databasen, med antal rader."""
+        return {
+            r["falt"]: r["n"]
+            for r in self.db.execute(
+                "SELECT falt, COUNT(*) AS n FROM fundamenta "
+                "WHERE kalla LIKE 'härlett%' GROUP BY falt ORDER BY falt"
+            )
+        }
+
+    def ta_bort_harledda(self, falt: str) -> int:
+        """Tar bort HÄRLEDDA värden för ett fält. Returnerar antalet rader.
+
+        Rör aldrig värden från yfinance eller från CSV-filerna -- bara
+        sådana som räknats fram av en härledning.
+
+        Behövs eftersom arkivet medvetet aldrig skriver över ett värde
+        med ingenting. Drar man tillbaka en härledning, som när den visat
+        sig opålitlig, blir de gamla proxyvärdena annars kvar och
+        fortsätter användas.
+        """
+        with self.db:
+            cur = self.db.execute(
+                "DELETE FROM fundamenta WHERE falt=? AND kalla LIKE 'härlett%'",
+                (falt,),
+            )
+        logg.info("tog bort %d härledda värden för %s", cur.rowcount, falt)
+        return cur.rowcount
+
     def hamtningar_med_problem(self, datum: dt.date) -> list[sqlite3.Row]:
         """Hämtningar som inte gick bra ett visst datum. Till rapporten."""
         return self.db.execute(

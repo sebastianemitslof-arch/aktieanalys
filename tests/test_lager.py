@@ -184,3 +184,39 @@ def test_databasfilen_skapas_med_katalog(tmp_path):
     with Lager(vag):
         pass
     assert vag.exists()
+
+
+# =====================================================================
+#  Rensa tillbakadragna härledningar
+# =====================================================================
+def test_harledda_falt_listas(lager):
+    bd = bolag(dt.date(2026, 11, 13), 100.0)
+    bd.satt("belaningsgrad", 0.37, "härlett ur skulder, tillgångar (proxyvärde)")
+    bd.satt("rantetackningsgrad", 2.8, "csv:fastighetsdata.csv")
+    lager.spara(bd)
+
+    assert lager.harledda_falt() == {"belaningsgrad": 1}
+
+
+def test_ta_bort_harledda_ror_inte_csv_eller_yfinance(lager):
+    """En tillbakadragen härledning ska kunna rensas utan att verkliga
+    tal försvinner."""
+    a = bolag(dt.date(2026, 11, 13), 100.0)
+    a.satt("belaningsgrad", 0.37, "härlett ur skulder, tillgångar (proxyvärde)")
+    lager.spara(a)
+
+    b = Bolagsdata(ticker="ANNAT.ST", hamtad=dt.date(2026, 11, 13))
+    b.satt("belaningsgrad", 0.41, "csv:fastighetsdata.csv")
+    b.satt("kurs", 50.0, "yfinance:info")
+    lager.spara(b)
+
+    assert lager.ta_bort_harledda("belaningsgrad") == 1
+
+    assert not lager.las("TEST.ST", dt.date(2026, 11, 13)).har("belaningsgrad")
+    kvar = lager.las("ANNAT.ST", dt.date(2026, 11, 13))
+    assert kvar.varde("belaningsgrad") == 0.41
+    assert kvar.varde("kurs") == 50.0
+
+
+def test_ta_bort_harledda_for_okant_falt_ar_ofarligt(lager):
+    assert lager.ta_bort_harledda("belaningsgrad") == 0
