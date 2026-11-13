@@ -58,6 +58,10 @@ kategorier:
       #                 inte på någon stavning. Bolaget är utköpt från börsen.
       - NORION.ST      # Norion Bank
 
+  # Bantad till 7 bolag 2026-11-13: varje bolag kräver substansvärden
+  # inskrivna för hand i data/manuellt/substansvarden.csv. Sju bolag
+  # räcker för en meningsfull percentilrank. Vill du ha fler: ta bort #
+  # på raderna nedan och fyll i deras substansvärden.
   Investmentbolag:
     mattuppsattning: investmentbolag
     bolag:
@@ -67,10 +71,10 @@ kategorier:
       - LUND-B.ST      # Lundbergforetagen
       - KINV-B.ST      # Kinnevik
       - SVOL-B.ST      # Svolder
-      - CRED-A.ST      # Creades
+      # - CRED-A.ST      # Creades -- avstängt: kräver manuell data
       - BURE.ST        # Bure Equity
-      - TRAC-B.ST      # Traction
-      - ORES.ST        # Investment AB Oresund
+      # - TRAC-B.ST      # Traction -- avstängt: kräver manuell data
+      # - ORES.ST        # Investment AB Oresund -- avstängt: kräver manuell data
 
   Halsovard:
     mattuppsattning: standard
@@ -126,6 +130,10 @@ kategorier:
       - TRUE-B.ST      # Truecaller
       - ENEA.ST        # Enea
 
+  # Bantad till 7 bolag 2026-11-13: varje bolag kräver förvaltningsresultat,
+  # belåningsgrad och räntetäckningsgrad i data/manuellt/fastighetsdata.csv,
+  # plus substansvärde i substansvarden.csv. Vill du ha fler: ta bort # och
+  # fyll i deras siffror.
   Fastighet:
     mattuppsattning: fastighet
     bolag:
@@ -136,15 +144,15 @@ kategorier:
       - HUFV-A.ST      # Hufvudstaden
       - SAGA-B.ST      # Sagax
       - WIHL.ST        # Wihlborgs
-      - DIOS.ST        # Dios
-      - PLAZ-B.ST      # Platzer
-      - ATRLJ-B.ST     # Atrium Ljungberg
-      - NP3.ST         # NP3 Fastigheter
-      - CATE.ST        # Catena
+      # - DIOS.ST        # Dios -- avstängt: kräver manuell data
+      # - PLAZ-B.ST      # Platzer -- avstängt: kräver manuell data
+      # - ATRLJ-B.ST     # Atrium Ljungberg -- avstängt: kräver manuell data
+      # - NP3.ST         # NP3 Fastigheter -- avstängt: kräver manuell data
+      # - CATE.ST        # Catena -- avstängt: kräver manuell data
       # - NYF.ST       # Nyfosa -- avstängt 2026-11-13: Yahoo svarar inte på
       #                 NYF.ST, NYFOSA.ST eller NYF-B.ST. Hittar du rätt
       #                 ticker på finance.yahoo.com, ta bort # och kör
       #                 hamta-data --bolag <ticker> för att prova den.
-      - PNDX-B.ST      # Pandox
-      - CORE-B.ST      # Corem Property
-      - SBB-B.ST       # Samhallsbyggnadsbolaget
+      # - PNDX-B.ST      # Pandox -- avstängt: kräver manuell data
+      # - CORE-B.ST      # Corem Property -- avstängt: kräver manuell data
+      # - SBB-B.ST       # Samhallsbyggnadsbolaget -- avstängt: kräver manuell data

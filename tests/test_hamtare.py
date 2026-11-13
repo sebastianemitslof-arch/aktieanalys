@@ -180,7 +180,7 @@ def test_provider_som_kraschar_fangas(inst):
     class TrasigProvider(Provider):
         namn = "trasig"
 
-        def hamta(self, ticker, idag=None):
+        def hamta(self, ticker, idag=None, kand_meta=None):
             bd = Bolagsdata(ticker=ticker, hamtad=idag or IDAG)
             bd.anteckna_fel("simulerat nätverksfel")
             return bd
@@ -225,5 +225,57 @@ def test_hamtloggen_skriver_en_rad_per_bolag(inst):
         assert h.lager.statistik()["hamtningar"] == 2
         problem = h.lager.hamtningar_med_problem(IDAG)
         assert [r["ticker"] for r in problem] == ["SAND.ST"]
+    finally:
+        h.stang()
+
+
+# =====================================================================
+#  Valutaminnet
+# =====================================================================
+def test_kand_valuta_skickas_med_till_providern(inst):
+    """Hämtaren ska ge providern vad vi redan vet, så att ett bantat
+    svar från Yahoo inte tappar rapportvalutan."""
+    sedda: list[dict] = []
+
+    class Spion(Provider):
+        namn = "spion"
+
+        def hamta(self, ticker, idag=None, kand_meta=None):
+            sedda.append(kand_meta or {})
+            bd = Bolagsdata(ticker=ticker, hamtad=idag or IDAG, namn="Spionbolaget")
+            bd.valuta, bd.rapportvaluta = "SEK", "USD"
+            bd.satt("kurs", 100.0, "spion")
+            return bd
+
+    h = bygg(inst, Spion())
+    try:
+        h.hamta(["AZN.ST"], idag=IDAG)          # första gången: inget känt
+        assert sedda[-1] == {}
+        h.hamta(["AZN.ST"], tvinga=True, idag=IDAG)   # nu finns det i databasen
+        assert sedda[-1]["rapportvaluta"] == "USD"
+        assert sedda[-1]["valuta"] == "SEK"
+        assert sedda[-1]["namn"] == "Spionbolaget"
+    finally:
+        h.stang()
+
+
+def test_valuta_overlever_i_databasen(inst):
+    """Valutan ska gå att läsa tillbaka, annars tappas den vid cacheläsning."""
+    class Kalla(Provider):
+        namn = "kalla"
+
+        def hamta(self, ticker, idag=None, kand_meta=None):
+            bd = Bolagsdata(ticker=ticker, hamtad=idag or IDAG, namn="Nordea")
+            bd.valuta, bd.rapportvaluta = "SEK", "EUR"
+            bd.satt("kurs", 190.0, "kalla")
+            return bd
+
+    h = bygg(inst, Kalla())
+    try:
+        h.hamta(["NDA-SE.ST"], idag=IDAG)
+        tillbaka = h.lager.las("NDA-SE.ST", IDAG)
+        assert tillbaka.rapportvaluta == "EUR"
+        assert tillbaka.valuta == "SEK"
+        assert tillbaka.namn == "Nordea"
     finally:
         h.stang()

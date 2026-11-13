@@ -14,12 +14,22 @@ import numpy as np
 import pandas as pd
 
 from aktieanalys.data.bolagsdata import Bolagsdata
+from aktieanalys.data.valuta import Valutaomraknare
 from aktieanalys.data.yfinance_provider import (
     YfinanceProvider,
+    _Vaxling,
     _arsserie,
     _senaste,
+    _senaste_med_ar,
     _tal,
 )
+
+KURSER = {"USD": 10.0, "EUR": 11.0}
+
+
+def vaxl(bd, rapportvaluta="SEK"):
+    """Växling med fasta valutakurser -- inga nätanrop i testerna."""
+    return _Vaxling(bd, rapportvaluta, Valutaomraknare(fasta_kurser=KURSER))
 
 IDAG = dt.date(2026, 11, 13)
 
@@ -99,7 +109,7 @@ def test_valutakrock_flaggas():
     bd = Bolagsdata(ticker="AZN.ST", hamtad=IDAG)
     bd.valuta, bd.rapportvaluta = "SEK", "USD"
     p._kontrollera_valuta(bd)
-    assert any("VALUTAKROCK" in f for f in bd.fel)
+    assert any("räknas om till kronor" in f for f in bd.fel)
 
 
 def test_samma_valuta_ger_ingen_varning():
@@ -175,7 +185,7 @@ def test_nettoskuld_raknas_ur_skulder_minus_kassa():
         "Total Debt": [50.0, 45.0, 40.0, 35.0],
         "Cash And Cash Equivalents": [20.0, 18.0, 15.0, 12.0],
     })
-    p._balansdata(bd, {}, balans)
+    p._balansdata(bd, {}, balans, vaxl(bd))
     assert bd.varde("nettoskuld") == 30.0
     assert "beräknat" in bd.kallor["nettoskuld"]
 
@@ -187,14 +197,14 @@ def test_investerat_kapital_raknas_nar_raden_saknas():
         "Stockholders Equity": [100.0, 90.0, 80.0, 70.0],
         "Total Debt": [50.0, 45.0, 40.0, 35.0],
     })
-    p._balansdata(bd, {}, balans)
+    p._balansdata(bd, {}, balans, vaxl(bd))
     assert bd.varde("investerat_kapital") == 150.0
 
 
 def test_balansdata_som_saknas_helt_markeras_med_orsak():
     p = YfinanceProvider()
     bd = Bolagsdata(ticker="TEST.ST", hamtad=IDAG)
-    p._balansdata(bd, {}, pd.DataFrame())
+    p._balansdata(bd, {}, pd.DataFrame(), vaxl(bd))
     for falt in ("eget_kapital", "nettoskuld", "investerat_kapital", "bolagsvarde"):
         assert falt in bd.saknade, falt
         assert bd.saknade[falt]
@@ -205,7 +215,7 @@ def test_bolagsvarde_raknas_ur_borsvarde_och_nettoskuld():
     bd = Bolagsdata(ticker="TEST.ST", hamtad=IDAG)
     bd.satt("borsvarde", 600e9, "test")
     balans = arsrapport({"Net Debt": [174e9, 160e9, 150e9, 140e9]})
-    p._balansdata(bd, {}, balans)
+    p._balansdata(bd, {}, balans, vaxl(bd))
     assert bd.varde("bolagsvarde") == 774e9
 
 
@@ -220,7 +230,7 @@ def test_resultatdata_satter_bade_senaste_aret_och_historiken():
         "Operating Income": [49.0, 69.0, 77.0, 61.0],
         "Net Income": [34.0, 50.0, 56.0, 45.0],
     })
-    p._resultatdata(bd, {"trailingEps": 19.21}, resultat)
+    p._resultatdata(bd, {"trailingEps": 19.21}, resultat, vaxl(bd))
 
     assert bd.varde("rorelseresultat") == 49.0
     assert len(bd.varde("rorelseresultat_historik")) == 4
@@ -230,14 +240,15 @@ def test_resultatdata_satter_bade_senaste_aret_och_historiken():
 def test_historiken_kapas_till_konfigurerat_antal_ar():
     p = YfinanceProvider(ar_historik=3)
     bd = Bolagsdata(ticker="TEST.ST", hamtad=IDAG)
-    p._resultatdata(bd, {}, arsrapport({"Operating Income": [1.0, 2.0, 3.0, 4.0]}))
+    p._resultatdata(bd, {}, arsrapport({"Operating Income": [1.0, 2.0, 3.0, 4.0]}),
+                    vaxl(bd))
     assert len(bd.varde("rorelseresultat_historik")) == 3
 
 
 def test_saknad_resultatrakning_markerar_falten():
     p = YfinanceProvider()
     bd = Bolagsdata(ticker="TEST.ST", hamtad=IDAG)
-    p._resultatdata(bd, {"ebitda": 71e9, "trailingEps": 5.0}, None)
+    p._resultatdata(bd, {"ebitda": 71e9, "trailingEps": 5.0}, None, vaxl(bd))
     assert "rorelseresultat" in bd.saknade
     assert bd.varde("ebitda") == 71e9  # info-värdet används ändå
 
@@ -246,7 +257,8 @@ def test_ebitda_faller_tillbaka_pa_info():
     """Banker saknar EBITDA i resultaträkningen -- det är väntat."""
     p = YfinanceProvider()
     bd = Bolagsdata(ticker="SEB-A.ST", hamtad=IDAG)
-    p._resultatdata(bd, {"ebitda": None}, arsrapport({"Net Income": [1.0, 2.0, 3.0, 4.0]}))
+    p._resultatdata(bd, {"ebitda": None},
+                    arsrapport({"Net Income": [1.0, 2.0, 3.0, 4.0]}), vaxl(bd))
     assert not bd.har("ebitda")
     assert "ebitda" in bd.saknade
 
@@ -288,3 +300,189 @@ def test_tomt_svar_raknas_som_misslyckande():
     bd = Bolagsdata(ticker="TEST.ST", hamtad=IDAG)
     assert p._forsok("resultatrakning", lambda: pd.DataFrame(), bd) is None
     assert any("tomt svar" in f for f in bd.fel)
+
+
+# =====================================================================
+#  Valutaomräkning
+# =====================================================================
+def test_rakenskaper_raknas_om_till_kronor():
+    """AstraZeneca redovisar i dollar men handlas i kronor."""
+    p = YfinanceProvider()
+    bd = Bolagsdata(ticker="AZN.ST", hamtad=IDAG)
+    balans = arsrapport({
+        "Stockholders Equity": [48.667, 45.0, 40.0, 35.0],
+        "Net Debt": [21.635, 20.0, 18.0, 16.0],
+    })
+    p._balansdata(bd, {}, balans, vaxl(bd, "USD"))
+
+    assert bd.varde("eget_kapital") == 48.667 * 10.0
+    assert bd.varde("nettoskuld") == 21.635 * 10.0
+    assert "omräknat från USD" in bd.kallor["eget_kapital"]
+
+
+def test_bookvalue_raknas_om():
+    """Det här är felet som gör Yahoos eget priceToBook obrukbart."""
+    p = YfinanceProvider()
+    bd = Bolagsdata(ticker="AZN.ST", hamtad=IDAG)
+    p._balansdata(bd, {"bookValue": 33.351}, pd.DataFrame(), vaxl(bd, "USD"))
+
+    assert bd.varde("eget_kapital_per_aktie") == 33.351 * 10.0
+    # Med kurs 1866 blir P/B ca 5.6 i stället för Yahoos 55.95
+    assert 5.0 < 1866.0 / bd.varde("eget_kapital_per_aktie") < 6.0
+
+
+def test_trailing_eps_raknas_INTE_om():
+    """trailingEps är redan i handelsvalutan -- omräkning skulle bli fel."""
+    p = YfinanceProvider()
+    bd = Bolagsdata(ticker="AZN.ST", hamtad=IDAG)
+    p._resultatdata(bd, {"trailingEps": 66.43}, None, vaxl(bd, "USD"))
+
+    assert bd.varde("vinst_per_aktie") == 66.43
+    assert "omräknat" not in bd.kallor["vinst_per_aktie"]
+
+
+def test_enterprise_value_raknas_INTE_om():
+    """enterpriseValue är redan i handelsvalutan (uppmätt mot börsvärdet)."""
+    p = YfinanceProvider()
+    bd = Bolagsdata(ticker="AZN.ST", hamtad=IDAG)
+    p._balansdata(bd, {"enterpriseValue": 2.892e12}, pd.DataFrame(), vaxl(bd, "USD"))
+
+    assert bd.varde("bolagsvarde") == 2.892e12
+
+
+def test_antal_aktier_raknas_INTE_om():
+    p = YfinanceProvider()
+    bd = Bolagsdata(ticker="AZN.ST", hamtad=IDAG)
+    p._balansdata(bd, {"sharesOutstanding": 1.55e9}, pd.DataFrame(), vaxl(bd, "USD"))
+    assert bd.varde("antal_aktier") == 1.55e9
+
+
+def test_arsserie_raknas_om_ar_for_ar():
+    p = YfinanceProvider(ar_historik=4)
+    bd = Bolagsdata(ticker="AZN.ST", hamtad=IDAG)
+    resultat = arsrapport({"Operating Income": [13.3, 12.0, 11.0, 10.0]})
+    p._resultatdata(bd, {}, resultat, vaxl(bd, "USD"))
+
+    serie = bd.varde("rorelseresultat_historik")
+    assert serie == [(2025, 133.0), (2024, 120.0), (2023, 110.0), (2022, 100.0)]
+
+
+def test_senaste_aret_raknas_om_bara_en_gang():
+    """Det enskilda talet tas ur den redan omräknade historiken."""
+    p = YfinanceProvider()
+    bd = Bolagsdata(ticker="AZN.ST", hamtad=IDAG)
+    p._resultatdata(bd, {}, arsrapport({"Operating Income": [13.3, 12.0, 11.0, 10.0]}),
+                    vaxl(bd, "USD"))
+    assert bd.varde("rorelseresultat") == 133.0  # inte 1330.0
+
+
+def test_bolagsvarde_blandar_inte_valutor():
+    """Börsvärde är kronor, nettoskuld är rapportvaluta -- reservvägen
+    måste använda den omräknade nettoskulden."""
+    p = YfinanceProvider()
+    bd = Bolagsdata(ticker="AZN.ST", hamtad=IDAG)
+    bd.satt("borsvarde", 2894e9, "yfinance:info")  # redan kronor
+    balans = arsrapport({"Net Debt": [21.635, 20.0, 18.0, 16.0]})
+    p._balansdata(bd, {}, balans, vaxl(bd, "USD"))
+
+    assert bd.varde("bolagsvarde") == 2894e9 + 21.635 * 10.0
+
+
+def test_saknad_valutakurs_markerar_faltet_saknat():
+    """Ett oomräknat tal är värre än inget tal."""
+    p = YfinanceProvider()
+    bd = Bolagsdata(ticker="XYZ.ST", hamtad=IDAG)
+    tom = _Vaxling(bd, "GBP", Valutaomraknare(fasta_kurser={}))  # ingen GBP-kurs
+    balans = arsrapport({"Stockholders Equity": [100.0, 90.0, 80.0, 70.0]})
+    p._balansdata(bd, {}, balans, tom)
+
+    assert not bd.har("eget_kapital")
+    assert "kunde inte räknas om från GBP" in bd.saknade["eget_kapital"]
+
+
+def test_svenska_bolag_rors_inte():
+    p = YfinanceProvider()
+    bd = Bolagsdata(ticker="VOLV-B.ST", hamtad=IDAG)
+    balans = arsrapport({"Stockholders Equity": [178.395, 170.0, 160.0, 150.0]})
+    p._balansdata(bd, {}, balans, vaxl(bd, "SEK"))
+
+    assert bd.varde("eget_kapital") == 178.395
+    assert "omräknat" not in bd.kallor["eget_kapital"]
+
+
+def test_senaste_med_ar_ger_bade_ar_och_varde():
+    df = arsrapport({"Total Debt": [174.0, 160.0, 150.0, 140.0]})
+    assert _senaste_med_ar(df, "Total Debt") == (2025, 174.0)
+    assert _senaste_med_ar(df, "Finns Inte") == (None, None)
+
+
+# =====================================================================
+#  Valutaomräknaren själv
+# =====================================================================
+def test_omraknare_ger_ett_for_kronor():
+    assert Valutaomraknare(fasta_kurser={}).kurs("SEK") == 1.0
+    assert Valutaomraknare(fasta_kurser={}).kurs(None) == 1.0
+
+
+def test_omraknare_ger_none_for_okand_valuta():
+    v = Valutaomraknare(fasta_kurser={"USD": 10.0})
+    assert v.kurs("JPY") is None
+    assert v.till_sek(100.0, "JPY") is None
+
+
+def test_omraknare_slapper_igenom_none():
+    assert Valutaomraknare(fasta_kurser={"USD": 10.0}).till_sek(None, "USD") is None
+
+
+def test_omraknare_valjer_kurs_vid_arsslut():
+    """Varje år ska räknas om med kursen som gällde vid det bokslutet."""
+    serie = pd.Series(
+        [9.0, 10.0, 11.0],
+        index=pd.to_datetime(["2023-12-29", "2024-12-30", "2025-12-30"]),
+    )
+    v = Valutaomraknare()
+    v._serier["USD"] = serie
+
+    assert v.kurs("USD", 2023) == 9.0
+    assert v.kurs("USD", 2024) == 10.0
+    assert v.kurs("USD", 2025) == 11.0
+    assert v.kurs("USD") == 11.0            # senaste kända
+    assert v.kurs("USD", 2022) is None      # före vår historik
+
+
+def test_okand_rapportvaluta_utesluter_rakenskaperna():
+    """Att gissa SEK gav tysta tiopotensfel. Nu markeras fälten saknade."""
+    p = YfinanceProvider()
+    bd = Bolagsdata(ticker="AZN.ST", hamtad=IDAG)
+    okand = _Vaxling(bd, None, Valutaomraknare(fasta_kurser=KURSER))
+    balans = arsrapport({"Stockholders Equity": [48.667, 45.0, 40.0, 35.0]})
+    p._balansdata(bd, {"bookValue": 33.351}, balans, okand)
+
+    assert not bd.har("eget_kapital")
+    assert not bd.har("eget_kapital_per_aktie")
+    assert "rapportvalutan är okänd" in bd.saknade["eget_kapital"]
+
+
+def test_okand_rapportvaluta_utesluter_arsserier():
+    p = YfinanceProvider()
+    bd = Bolagsdata(ticker="AZN.ST", hamtad=IDAG)
+    okand = _Vaxling(bd, None, Valutaomraknare(fasta_kurser=KURSER))
+    p._resultatdata(bd, {}, arsrapport({"Operating Income": [13.3, 12.0, 11.0, 10.0]}),
+                    okand)
+
+    assert not bd.har("rorelseresultat_historik")
+    assert "rapportvalutan är okänd" in bd.saknade["rorelseresultat_historik"]
+
+
+def test_kand_meta_anvands_nar_yahoo_utelamnar_valutan():
+    """Bantade svar från Yahoo saknar ibland financialCurrency."""
+    p = YfinanceProvider()
+    bd = Bolagsdata(ticker="AZN.ST", hamtad=IDAG)
+    # Simulerar hamta()-logiken: info utan financialCurrency
+    info = {"currency": "SEK", "longName": "AstraZeneca PLC"}
+    kand = {"namn": "AstraZeneca PLC", "valuta": "SEK", "rapportvaluta": "USD"}
+    bd.rapportvaluta = info.get("financialCurrency") or kand.get("rapportvaluta")
+    assert bd.rapportvaluta == "USD"
+
+    vaxling = _Vaxling(bd, bd.rapportvaluta, Valutaomraknare(fasta_kurser=KURSER))
+    assert vaxling.kand and vaxling.behovs

@@ -14,6 +14,7 @@ att återskapa.
 
 Tabellerna:
   fundamenta  ett värde per bolag, fält och hämtdatum
+  bolagsmeta  namn och valutor per bolag och hämtdatum
   kurser      daglig stängningskurs och volym
   saknat      vilka fält som saknades, med orsak
   hamtlogg    varje hämtningsförsök och hur det gick
@@ -51,6 +52,15 @@ CREATE TABLE IF NOT EXISTS kurser (
     datum      TEXT NOT NULL,
     stangning  REAL NOT NULL,
     volym      REAL,
+    PRIMARY KEY (ticker, datum)
+);
+
+CREATE TABLE IF NOT EXISTS bolagsmeta (
+    ticker        TEXT NOT NULL,
+    datum         TEXT NOT NULL,
+    namn          TEXT,
+    valuta        TEXT,
+    rapportvaluta TEXT,
     PRIMARY KEY (ticker, datum)
 );
 
@@ -127,6 +137,11 @@ class Lager:
                     (bd.ticker, datum, falt, tal, text, bd.kallor.get(falt)),
                 )
 
+            self.db.execute(
+                "INSERT OR REPLACE INTO bolagsmeta "
+                "(ticker, datum, namn, valuta, rapportvaluta) VALUES (?,?,?,?,?)",
+                (bd.ticker, datum, bd.namn, bd.valuta, bd.rapportvaluta),
+            )
             self.db.execute(
                 "DELETE FROM saknat WHERE ticker=? AND datum=?", (bd.ticker, datum)
             )
@@ -218,9 +233,11 @@ class Lager:
             return None
 
         senaste = max((r["datum"] for r in rader), default=per)
-        bd = Bolagsdata(
-            ticker=ticker, hamtad=dt.date.fromisoformat(senaste), namn=ticker
-        )
+        bd = Bolagsdata(ticker=ticker, hamtad=dt.date.fromisoformat(senaste))
+        meta = self.senast_kanda_meta(ticker, per_datum)
+        bd.namn = meta.get("namn") or ticker
+        bd.valuta = meta.get("valuta")
+        bd.rapportvaluta = meta.get("rapportvaluta")
         for r in rader:
             falt = r["falt"]
             if falt not in FALT:
@@ -248,6 +265,37 @@ class Lager:
             if r["falt"] in FALT:
                 bd.markera_saknat(r["falt"], r["orsak"])
         return bd
+
+    def senast_kanda_meta(
+        self, ticker: str, per_datum: dt.date | None = None
+    ) -> dict[str, str | None]:
+        """Senast kända namn och valutor för ett bolag.
+
+        Yahoo utelämnar ibland financialCurrency ur sitt svar. Utan den
+        går det inte att veta om räkenskaperna behöver räknas om till
+        kronor -- och att då gissa "SEK" ger tysta tiopotensfel. Därför
+        sparas valutan, och den senast kända används som reserv.
+        """
+        per = (per_datum or dt.date.today()).isoformat()
+        rad = self.db.execute(
+            "SELECT namn, valuta, rapportvaluta FROM bolagsmeta "
+            "WHERE ticker=? AND datum<=? AND rapportvaluta IS NOT NULL "
+            "ORDER BY datum DESC LIMIT 1",
+            (ticker, per),
+        ).fetchone()
+        if rad is None:
+            rad = self.db.execute(
+                "SELECT namn, valuta, rapportvaluta FROM bolagsmeta "
+                "WHERE ticker=? AND datum<=? ORDER BY datum DESC LIMIT 1",
+                (ticker, per),
+            ).fetchone()
+        if rad is None:
+            return {}
+        return {
+            "namn": rad["namn"],
+            "valuta": rad["valuta"],
+            "rapportvaluta": rad["rapportvaluta"],
+        }
 
     def las_kurser(
         self, ticker: str, till_datum: dt.date | None = None
@@ -299,6 +347,10 @@ class Lager:
             "kursrader": q("SELECT COUNT(*) FROM kurser"),
             "saknade_varden": q("SELECT COUNT(*) FROM saknat"),
             "hamtningar": q("SELECT COUNT(*) FROM hamtlogg"),
+            "bolag_med_valuta": q(
+                "SELECT COUNT(DISTINCT ticker) FROM bolagsmeta "
+                "WHERE rapportvaluta IS NOT NULL"
+            ),
             "forsta_datum": q("SELECT MIN(datum) FROM fundamenta"),
             "senaste_datum": q("SELECT MAX(datum) FROM fundamenta"),
             "storlek_kb": round(self.vag.stat().st_size / 1024, 1)

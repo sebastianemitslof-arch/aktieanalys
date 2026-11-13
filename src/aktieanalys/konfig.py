@@ -198,6 +198,7 @@ class Datainstallningar(_Bas):
     cache_dagar: int = Field(ge=0, le=365)
     max_forsok: int = Field(ge=1, le=10)
     paus_mellan_forsok_sek: float = Field(ge=0, le=60)
+    paus_mellan_bolag_sek: float = Field(default=0.7, ge=0, le=60)
 
 
 class Logginstallningar(_Bas):

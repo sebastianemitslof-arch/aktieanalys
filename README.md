@@ -146,6 +146,16 @@ rättvist. De fyller du i i `data/manuellt/`:
 | `fastighetsdata.csv` | Fastighet | förvaltningsresultat per aktie, belåningsgrad, räntetäckningsgrad |
 | `bankdata.csv` | Bank/finans | kärnprimärkapitalrelation (CET1) |
 
+**Filerna är redan förifyllda med rader** för de bolag som behöver dem
+-- 7 investmentbolag, 7 fastighetsbolag och 7 banker, tre år tillbaka.
+Du behöver bara skriva in talen i rätt ruta. Så här ser en rad ut före
+och efter:
+
+```
+INVE-B.ST,2025,,            <- före: tomma celler, uppgift saknas
+INVE-B.ST,2025,385.50,1180000000000
+```
+
 Formatet är en rad per bolag och år:
 
 ```
@@ -177,6 +187,55 @@ listas i rapporten med orsak -- det får aldrig en gissad siffra.
 
 ---
 
+## Valutor -- en fälla värd att känna till
+
+Åtta av bolagen i universumet handlas i kronor men **redovisar i en
+annan valuta**: AstraZeneca i dollar, och Evolution, Hexagon, Nordea,
+Betsson, Fenix Outdoor, Medicover och TietoEVRY i euro.
+
+Yahoo är inkonsekvent med det. Uppmätt, inte gissat:
+
+| Uppgift | Valuta |
+|---|---|
+| kurs, börsvärde, bolagsvärde | kronor (handelsvalutan) |
+| `trailingEps` (vinst per aktie) | kronor |
+| `bookValue` (eget kapital per aktie) | **rapportvalutan** |
+| allt ur resultat- och balansräkningen | **rapportvalutan** |
+
+Följden är att **Yahoos eget `priceToBook` är felaktigt** för dessa
+bolag. AstraZeneca visas som P/B 56 i stället för 5,6, Nordea som 20,6
+i stället för 1,9 -- fel med ungefär en faktor tio. Deras `trailingPE`
+är däremot rätt, eftersom båda leden är i kronor.
+
+Det här är inget randfall: Nordea är en bank, och P/B utgör 60 procent
+av bankernas värderingspelare. Utan omräkning hade Nordea alltid
+rankats sist i sin kategori, och felet hade inte syns någonstans i
+rapporten.
+
+Systemet hämtar därför valutakurser (USDSEK, EURSEK) från Yahoo och
+räknar om räkenskapssiffrorna till kronor -- varje historiskt år med
+kursen som gällde vid det bokslutet, så att historiken blir internt
+konsekvent. Kurserna cachas i databasen.
+
+Två skyddsnät, eftersom Yahoo ibland utelämnar valutauppgiften ur sitt
+svar när anropen stryps:
+
+1. Rapportvalutan **sparas i databasen**. Saknas den i ett svar används
+   den senast kända.
+2. Är valutan ändå okänd **utesluts räkenskapssiffrorna** och markeras
+   som saknade med orsak. Ett oomräknat tal är värre än inget tal, för
+   det ser ut att ha gått bra.
+
+Kontrollera själv:
+
+```bash
+python -m aktieanalys visa-bolag AZN.ST
+```
+
+Står det "omräknat från USD" i källkolumnen har omräkningen gjorts.
+
+---
+
 ## Databasen
 
 `data/cache.sqlite` har två roller samtidigt:
@@ -190,8 +249,9 @@ gällde då, inte dagens siffror. Det är den enda delen av projektet som
 inte går att återskapa -- **radera den aldrig.** Den ligger med i
 repot med flit.
 
-Fyra tabeller: `fundamenta` (ett värde per bolag, fält och hämtdatum),
-`kurser` (daglig stängningskurs), `saknat` (vad som saknades och varför)
+Fem tabeller: `fundamenta` (ett värde per bolag, fält och hämtdatum),
+`kurser` (daglig stängningskurs, även valutakurser), `bolagsmeta`
+(namn och valutor), `saknat` (vad som saknades och varför)
 och `hamtlogg` (varje hämtningsförsök och hur det gick).
 
 ---

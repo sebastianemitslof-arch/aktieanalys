@@ -30,8 +30,19 @@ class Provider(ABC):
     namn: str = "okänd"
 
     @abstractmethod
-    def hamta(self, ticker: str, idag: dt.date | None = None) -> Bolagsdata:
-        """Hämtar allt som går för en ticker. Höjer aldrig undantag."""
+    def hamta(
+        self,
+        ticker: str,
+        idag: dt.date | None = None,
+        kand_meta: dict[str, str | None] | None = None,
+    ) -> Bolagsdata:
+        """Hämtar allt som går för en ticker. Höjer aldrig undantag.
+
+        kand_meta är vad vi redan vet om bolaget från tidigare hämtningar
+        (namn, handelsvaluta, rapportvaluta). Yahoo utelämnar ibland
+        valutauppgiften ur sitt svar, och då är det senast kända bättre
+        än att gissa. En källa som inte behöver hinten kan ignorera den.
+        """
 
     def hamta_manga(
         self, tickers: list[str], idag: dt.date | None = None
@@ -56,7 +67,12 @@ class Minnesprovider(Provider):
     def satt_bolag(self, ticker: str, varden: dict[str, Any]) -> None:
         self.data[ticker] = varden
 
-    def hamta(self, ticker: str, idag: dt.date | None = None) -> Bolagsdata:
+    def hamta(
+        self,
+        ticker: str,
+        idag: dt.date | None = None,
+        kand_meta: dict[str, str | None] | None = None,
+    ) -> Bolagsdata:
         idag = idag or dt.date.today()
         bd = Bolagsdata(ticker=ticker, hamtad=idag, namn=ticker)
         varden = self.data.get(ticker)

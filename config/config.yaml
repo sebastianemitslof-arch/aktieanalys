@@ -254,6 +254,12 @@ data:
   max_forsok: 3
   paus_mellan_forsok_sek: 2.0
 
+  # Kort paus mellan bolagen. Yahoo stryper anrop efter ungefär 90 i rad
+  # och börjar då svara med ofullständiga uppgifter -- vilket är värre än
+  # att inte svara, eftersom det ser ut att ha gått bra. Pausen gör hela
+  # körningen ett par minuter långsammare och betydligt mer tillförlitlig.
+  paus_mellan_bolag_sek: 0.7
+
 
 # ---------------------------------------------------------------------
 #  LOGGNING

@@ -23,6 +23,7 @@ import pandas as pd
 
 from aktieanalys.data.bolagsdata import Bolagsdata
 from aktieanalys.data.provider import Provider
+from aktieanalys.data.valuta import Valutaomraknare
 from aktieanalys.logg import hamta
 
 logg = hamta(__name__)
@@ -30,6 +31,86 @@ logg = hamta(__name__)
 # yfinance är pratsam och loggar varje misslyckat anrop som fel. Vi gör
 # vår egen felhantering, så dess egen logg dämpas.
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+
+
+class _Vaxling:
+    """Räknar om räkenskapssiffror till kronor för ett enskilt bolag.
+
+    Håller reda på vilken valuta bolaget redovisar i, och markerar fält
+    som saknade om omräkningen inte går -- ett oomräknat tal är värre
+    än inget tal.
+    """
+
+    def __init__(
+        self, bd: Bolagsdata, rapportvaluta: str | None, omraknare: Valutaomraknare
+    ) -> None:
+        self.bd = bd
+        self.valuta = rapportvaluta  # None = OKÄND, inte SEK
+        self.omraknare = omraknare
+
+    @property
+    def kand(self) -> bool:
+        return self.valuta is not None
+
+    @property
+    def behovs(self) -> bool:
+        return self.valuta != "SEK"
+
+    OKAND_ORSAK = (
+        "rapportvalutan är okänd -- Yahoo utelämnade financialCurrency och "
+        "ingen tidigare hämtning har den. Utan valuta går det inte att avgöra "
+        "om siffran behöver räknas om till kronor."
+    )
+
+    def satt(
+        self, falt: str, belopp: float | None, kalla: str, ar: int | None = None
+    ) -> None:
+        """Sätter ett räkenskapsfält, omräknat till kronor."""
+        if belopp is None:
+            self.bd.markera_saknat(falt, "värdet saknades i källan")
+            return
+        if not self.kand:
+            self.bd.markera_saknat(falt, self.OKAND_ORSAK)
+            return
+        if not self.behovs:
+            self.bd.satt(falt, belopp, kalla)
+            return
+        i_kronor = self.omraknare.till_sek(belopp, self.valuta, ar)
+        if i_kronor is None:
+            self.bd.markera_saknat(
+                falt,
+                f"kunde inte räknas om från {self.valuta} till kronor "
+                f"-- valutakursen gick inte att hämta",
+            )
+            return
+        self.bd.satt(falt, i_kronor, f"{kalla}, omräknat från {self.valuta}")
+
+    def satt_serie(
+        self, falt: str, serie: list[tuple[int, float]] | None, kalla: str
+    ) -> None:
+        """Sätter en årsserie, varje år omräknat med sin egen valutakurs."""
+        if serie is None:
+            return
+        if not self.kand:
+            self.bd.markera_saknat(falt, self.OKAND_ORSAK)
+            return
+        if not self.behovs:
+            self.bd.satt(falt, serie, kalla)
+            return
+        i_kronor = self.omraknare.serie_till_sek(serie, self.valuta)
+        if not i_kronor:
+            self.bd.markera_saknat(
+                falt,
+                f"kunde inte räknas om från {self.valuta} till kronor "
+                f"-- valutakursen gick inte att hämta",
+            )
+            return
+        if len(i_kronor) < len(serie):
+            logg.warning(
+                "%s: %d av %d år kunde räknas om för %s",
+                self.bd.ticker, len(i_kronor), len(serie), falt,
+            )
+        self.bd.satt(falt, i_kronor, f"{kalla}, omräknat från {self.valuta}")
 
 
 class YfinanceProvider(Provider):
@@ -41,11 +122,15 @@ class YfinanceProvider(Provider):
         paus_sek: float = 2.0,
         handelsdagar_for_omsattning: int = 60,
         ar_historik: int = 5,
+        valutaomraknare: Valutaomraknare | None = None,
     ) -> None:
         self.max_forsok = max_forsok
         self.paus_sek = paus_sek
         self.handelsdagar = handelsdagar_for_omsattning
         self.ar_historik = ar_historik
+        self.valutaomraknare = valutaomraknare or Valutaomraknare(
+            max_forsok=max_forsok, paus_sek=paus_sek, ar_historik=ar_historik
+        )
 
     # =================================================================
     #  Nätanrop med omförsök
@@ -82,7 +167,15 @@ class YfinanceProvider(Provider):
     # =================================================================
     #  Huvudmetoden
     # =================================================================
-    def hamta(self, ticker: str, idag: dt.date | None = None) -> Bolagsdata:
+    def hamta(
+        self,
+        ticker: str,
+        idag: dt.date | None = None,
+        kand_meta: dict[str, str | None] | None = None,
+    ) -> Bolagsdata:
+        """kand_meta är senast kända namn/valutor ur databasen, som används
+        när Yahoos svar är bantat (vilket händer vid strypning)."""
+        kand_meta = kand_meta or {}
         bd = Bolagsdata(ticker=ticker, hamtad=idag or dt.date.today())
         try:
             import yfinance as yf
@@ -119,14 +212,25 @@ class YfinanceProvider(Provider):
             self._markera_allt_saknat(bd, "tickern gav inget svar")
             return bd
 
-        bd.namn = info.get("longName") or info.get("shortName")
-        bd.valuta = info.get("currency")
-        bd.rapportvaluta = info.get("financialCurrency")
+        bd.namn = info.get("longName") or info.get("shortName") or kand_meta.get("namn")
+        bd.valuta = info.get("currency") or kand_meta.get("valuta")
+        bd.rapportvaluta = info.get("financialCurrency") or kand_meta.get("rapportvaluta")
+        if info.get("financialCurrency") is None and bd.rapportvaluta:
+            logg.info(
+                "%s: Yahoo utelämnade financialCurrency, använder senast kända (%s)",
+                ticker, bd.rapportvaluta,
+            )
+        if bd.rapportvaluta is None:
+            bd.anteckna_fel(
+                "rapportvalutan är okänd: räkenskapssiffrorna kan inte "
+                "valutasäkras och utesluts därför"
+            )
         self._kontrollera_valuta(bd)
 
+        vaxling = _Vaxling(bd, bd.rapportvaluta, self.valutaomraknare)
         self._marknadsdata(bd, info, historik)
-        self._resultatdata(bd, info, resultat)
-        self._balansdata(bd, info, balans)
+        self._resultatdata(bd, info, resultat, vaxling)
+        self._balansdata(bd, info, balans, vaxling)
         self._markera_resten_saknat(bd)
         return bd
 
@@ -148,9 +252,8 @@ class YfinanceProvider(Provider):
             )
         if bd.rapportvaluta and bd.valuta and bd.rapportvaluta != bd.valuta:
             bd.anteckna_fel(
-                f"VALUTAKROCK: kursen är i {bd.valuta} men räkenskaperna i "
-                f"{bd.rapportvaluta}. Nyckeltal som blandar kurs och "
-                f"räkenskaper (P/E, P/B, EV/EBIT) blir fel utan omräkning."
+                f"kursen är i {bd.valuta} men räkenskaperna i "
+                f"{bd.rapportvaluta}: räkenskapssiffrorna räknas om till kronor"
             )
             logg.warning("%s: valutakrock %s/%s", bd.ticker, bd.valuta, bd.rapportvaluta)
 
@@ -212,10 +315,14 @@ class YfinanceProvider(Provider):
             bd.markera_saknat("daglig_omsattning", "Yahoo gav ingen volymdata")
 
     # =================================================================
-    #  Resultaträkning
+    #  Resultaträkning  (siffrorna är i rapportvalutan)
     # =================================================================
     def _resultatdata(
-        self, bd: Bolagsdata, info: dict[str, Any], resultat: pd.DataFrame | None
+        self,
+        bd: Bolagsdata,
+        info: dict[str, Any],
+        resultat: pd.DataFrame | None,
+        vaxling: _Vaxling,
     ) -> None:
         if resultat is None:
             for falt in (
@@ -224,14 +331,14 @@ class YfinanceProvider(Provider):
                 "nettoresultat_historik", "vinst_per_aktie_historik",
             ):
                 bd.markera_saknat(falt, "Yahoo gav ingen resultaträkning")
-            bd.satt("ebitda", _tal(info, "ebitda"), "yfinance:info")
-            bd.satt("vinst_per_aktie", _tal(info, "trailingEps"), "yfinance:info")
+            vaxling.satt("ebitda", _tal(info, "ebitda"), "yfinance:info")
+            self._vinst_per_aktie(bd, info)
             return
 
         kalla = "yfinance:income_stmt"
         par = {
             "omsattning_historik": ("Total Revenue", "Operating Revenue"),
-            "rorelseresultat_historik": ("Operating Income", "EBIT", "Operating Revenue"),
+            "rorelseresultat_historik": ("Operating Income", "EBIT"),
             "nettoresultat_historik": (
                 "Net Income",
                 "Net Income Common Stockholders",
@@ -249,14 +356,15 @@ class YfinanceProvider(Provider):
                 )
                 continue
             serie = serie[: self.ar_historik]
-            bd.satt(falt, serie, f"{kalla} ({len(serie)} år)")
+            vaxling.satt_serie(falt, serie, f"{kalla} ({len(serie)} år)")
             if len(serie) < self.ar_historik:
                 logg.debug(
                     "%s: %s har bara %d av %d år",
                     bd.ticker, falt, len(serie), self.ar_historik,
                 )
 
-        # Senaste året som enskilt tal
+        # Senaste året som enskilt tal. Tas ur den redan omräknade
+        # historiken, så att ingenting kan bli omräknat två gånger.
         for falt, historikfalt in [
             ("omsattning", "omsattning_historik"),
             ("rorelseresultat", "rorelseresultat_historik"),
@@ -264,90 +372,136 @@ class YfinanceProvider(Provider):
         ]:
             serie = bd.varde(historikfalt)
             if serie:
-                bd.satt(falt, serie[0][1], f"{kalla} ({serie[0][0]})")
+                bd.satt(falt, serie[0][1], f"{bd.kallor[historikfalt]} ({serie[0][0]})")
             else:
                 bd.markera_saknat(falt, "saknas i resultaträkningen")
 
         ebitda = _arsserie(resultat, "EBITDA", "Normalized EBITDA")
         if ebitda:
-            bd.satt("ebitda", ebitda[0][1], f"{kalla} ({ebitda[0][0]})")
+            vaxling.satt("ebitda", ebitda[0][1], f"{kalla} ({ebitda[0][0]})", ebitda[0][0])
         else:
-            bd.satt("ebitda", _tal(info, "ebitda"), "yfinance:info")
+            vaxling.satt("ebitda", _tal(info, "ebitda"), "yfinance:info")
 
+        self._vinst_per_aktie(bd, info)
+
+    @staticmethod
+    def _vinst_per_aktie(bd: Bolagsdata, info: dict[str, Any]) -> None:
+        """trailingEps är i HANDELSVALUTAN och ska inte räknas om.
+
+        Uppmätt på AstraZeneca: trailingEps 66.43 mot ett nettoresultat på
+        10.2 miljarder dollar och 1.55 miljarder aktier -- alltså kronor.
+        Därför ger Yahoos trailingPE rätt svar även för dessa bolag,
+        medan deras priceToBook inte gör det.
+        """
         vpa = _tal(info, "trailingEps")
         if vpa is not None:
-            bd.satt("vinst_per_aktie", vpa, "yfinance:info (rullande 12 mån)")
+            bd.satt("vinst_per_aktie", vpa, "yfinance:info (rullande 12 mån, i kronor)")
+            return
+        serie = bd.varde("vinst_per_aktie_historik")
+        if serie:
+            bd.satt("vinst_per_aktie", serie[0][1],
+                    f"{bd.kallor['vinst_per_aktie_historik']} ({serie[0][0]})")
         else:
-            serie = bd.varde("vinst_per_aktie_historik")
-            if serie:
-                bd.satt("vinst_per_aktie", serie[0][1], f"{kalla} ({serie[0][0]})")
-            else:
-                bd.markera_saknat("vinst_per_aktie", "saknas både i info och rapport")
+            bd.markera_saknat("vinst_per_aktie", "saknas både i info och rapport")
 
     # =================================================================
-    #  Balansräkning
+    #  Balansräkning  (siffrorna är i rapportvalutan)
     # =================================================================
     def _balansdata(
-        self, bd: Bolagsdata, info: dict[str, Any], balans: pd.DataFrame | None
+        self,
+        bd: Bolagsdata,
+        info: dict[str, Any],
+        balans: pd.DataFrame | None,
+        vaxling: _Vaxling,
     ) -> None:
         kalla = "yfinance:balance_sheet"
 
-        eget = _senaste(balans, "Stockholders Equity", "Total Equity Gross Minority Interest")
-        skulder = _senaste(balans, "Total Debt")
-        kassa = _senaste(
+        ar_eget, eget = _senaste_med_ar(
+            balans, "Stockholders Equity", "Total Equity Gross Minority Interest"
+        )
+        ar_skuld, skulder = _senaste_med_ar(balans, "Total Debt")
+        _, kassa = _senaste_med_ar(
             balans,
             "Cash And Cash Equivalents",
             "Cash Cash Equivalents And Short Term Investments",
         )
-        aktier = _senaste(balans, "Ordinary Shares Number", "Share Issued")
-        investerat = _senaste(balans, "Invested Capital")
-        nettoskuld = _senaste(balans, "Net Debt")
+        _, aktier = _senaste_med_ar(balans, "Ordinary Shares Number", "Share Issued")
+        ar_inv, investerat = _senaste_med_ar(balans, "Invested Capital")
+        ar_netto, nettoskuld = _senaste_med_ar(balans, "Net Debt")
 
-        # Antal aktier: info är färskare än balansräkningen
-        bd.satt("antal_aktier", _tal(info, "sharesOutstanding") or aktier,
-                "yfinance:info" if _tal(info, "sharesOutstanding") else kalla)
+        # Antal aktier är ett styckantal och räknas aldrig om.
+        # Info är färskare än balansräkningen.
+        fran_info = _tal(info, "sharesOutstanding")
+        bd.satt("antal_aktier", fran_info or aktier,
+                "yfinance:info" if fran_info else kalla)
 
         if eget is not None:
-            bd.satt("eget_kapital", eget, kalla)
+            vaxling.satt("eget_kapital", eget, kalla, ar_eget)
         else:
             bd.markera_saknat("eget_kapital", "raden Stockholders Equity saknades")
 
+        # bookValue är i RAPPORTVALUTAN -- det är felet som gör Yahoos
+        # eget priceToBook obrukbart för AstraZeneca och Nordea. Det är
+        # ett färskare kvartalsvärde än balansräkningen, så det räknas om
+        # med senaste valutakursen.
         ekpa = _tal(info, "bookValue")
         if ekpa is not None:
-            bd.satt("eget_kapital_per_aktie", ekpa, "yfinance:info")
-        elif eget is not None and bd.har("antal_aktier") and bd.varde("antal_aktier"):
-            bd.satt("eget_kapital_per_aktie", eget / bd.varde("antal_aktier"),
-                    "beräknat: eget kapital / antal aktier")
+            vaxling.satt("eget_kapital_per_aktie", ekpa, "yfinance:info")
+        elif bd.har("eget_kapital") and bd.varde("antal_aktier"):
+            bd.satt(
+                "eget_kapital_per_aktie",
+                bd.varde("eget_kapital") / bd.varde("antal_aktier"),
+                "beräknat: eget kapital / antal aktier",
+            )
         else:
-            bd.markera_saknat("eget_kapital_per_aktie", "saknar eget kapital eller antal aktier")
+            bd.markera_saknat(
+                "eget_kapital_per_aktie", "saknar eget kapital eller antal aktier"
+            )
 
         if nettoskuld is not None:
-            bd.satt("nettoskuld", nettoskuld, kalla)
+            vaxling.satt("nettoskuld", nettoskuld, kalla, ar_netto)
         elif skulder is not None:
-            bd.satt("nettoskuld", skulder - (kassa or 0.0),
-                    f"beräknat: totala skulder - kassa ({kalla})")
+            vaxling.satt(
+                "nettoskuld", skulder - (kassa or 0.0),
+                f"beräknat: totala skulder - kassa ({kalla})", ar_skuld,
+            )
         elif _tal(info, "totalDebt") is not None:
-            bd.satt("nettoskuld",
-                    _tal(info, "totalDebt") - (_tal(info, "totalCash") or 0.0),
-                    "beräknat: totalDebt - totalCash (yfinance:info)")
+            vaxling.satt(
+                "nettoskuld",
+                _tal(info, "totalDebt") - (_tal(info, "totalCash") or 0.0),
+                "beräknat: totalDebt - totalCash (yfinance:info)",
+            )
         else:
-            bd.markera_saknat("nettoskuld", "varken nettoskuld eller skulder/kassa fanns")
+            bd.markera_saknat(
+                "nettoskuld", "varken nettoskuld eller skulder/kassa fanns"
+            )
 
         if investerat is not None:
-            bd.satt("investerat_kapital", investerat, kalla)
+            vaxling.satt("investerat_kapital", investerat, kalla, ar_inv)
         elif eget is not None and skulder is not None:
-            bd.satt("investerat_kapital", eget + skulder,
-                    f"beräknat: eget kapital + skulder ({kalla})")
+            vaxling.satt(
+                "investerat_kapital", eget + skulder,
+                f"beräknat: eget kapital + skulder ({kalla})", ar_eget,
+            )
         else:
-            bd.markera_saknat("investerat_kapital",
-                              "raden Invested Capital saknades och gick inte att räkna")
+            bd.markera_saknat(
+                "investerat_kapital",
+                "raden Invested Capital saknades och gick inte att räkna",
+            )
 
+        # enterpriseValue är redan i HANDELSVALUTAN (uppmätt: det stämmer
+        # med börsvärdet, som är kurs gånger antal aktier). Räknas inte om.
         ev = _tal(info, "enterpriseValue")
         if ev is not None:
-            bd.satt("bolagsvarde", ev, "yfinance:info")
+            bd.satt("bolagsvarde", ev, "yfinance:info (i kronor)")
         elif bd.har("borsvarde") and bd.har("nettoskuld"):
-            bd.satt("bolagsvarde", bd.varde("borsvarde") + bd.varde("nettoskuld"),
-                    "beräknat: börsvärde + nettoskuld")
+            # Båda är kronor här: börsvärdet från början, nettoskulden
+            # efter omräkningen ovan.
+            bd.satt(
+                "bolagsvarde",
+                bd.varde("borsvarde") + bd.varde("nettoskuld"),
+                "beräknat: börsvärde + nettoskuld",
+            )
         else:
             bd.markera_saknat("bolagsvarde", "saknar börsvärde eller nettoskuld")
 
@@ -416,3 +570,15 @@ def _senaste(df: pd.DataFrame | None, *rader: str) -> float | None:
     """Senaste årets värde för en rad i en årsrapport."""
     serie = _arsserie(df, *rader)
     return serie[0][1] if serie else None
+
+
+def _senaste_med_ar(
+    df: pd.DataFrame | None, *rader: str
+) -> tuple[int | None, float | None]:
+    """Senaste årets värde OCH vilket år det gäller.
+
+    Året behövs för att kunna räkna om beloppet med valutakursen som
+    gällde vid det bokslutet.
+    """
+    serie = _arsserie(df, *rader)
+    return (serie[0][0], serie[0][1]) if serie else (None, None)

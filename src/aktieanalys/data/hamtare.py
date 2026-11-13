@@ -15,12 +15,14 @@ effekt direkt utan att du behöver tvinga om en hämtning.
 from __future__ import annotations
 
 import datetime as dt
+import time
 from dataclasses import dataclass, field
 
 from aktieanalys.data.bolagsdata import MANUELLA_FALT, Bolagsdata
 from aktieanalys.data.csv_komplettering import CsvKomplettering
 from aktieanalys.data.lager import Lager
 from aktieanalys.data.provider import Provider
+from aktieanalys.data.valuta import Valutaomraknare
 from aktieanalys.data.yfinance_provider import YfinanceProvider
 from aktieanalys.konfig import Installningar
 from aktieanalys.logg import hamta
@@ -68,13 +70,21 @@ class Hamtare:
     ) -> None:
         self.inst = inst
         c = inst.config
+        # Lagret skapas först: valutaomräknaren cachar sina kurser där,
+        # så USDSEK och EURSEK hämtas en gång och inte per bolag.
+        self.lager = lager or Lager(inst.databasvag)
         self.provider = provider or YfinanceProvider(
             max_forsok=c.data.max_forsok,
             paus_sek=c.data.paus_mellan_forsok_sek,
             handelsdagar_for_omsattning=c.universum.handelsdagar_for_omsattning,
             ar_historik=c.poang.antal_ar_historik,
+            valutaomraknare=Valutaomraknare(
+                lager=self.lager,
+                max_forsok=c.data.max_forsok,
+                paus_sek=c.data.paus_mellan_forsok_sek,
+                ar_historik=c.poang.antal_ar_historik,
+            ),
         )
-        self.lager = lager or Lager(inst.databasvag)
         self.csv = csv if csv is not None else CsvKomplettering(inst.manuell_katalog)
 
     # =================================================================
@@ -99,11 +109,14 @@ class Hamtare:
                 ", ".join(rapport.okanda_csv_tickers),
             )
 
+        paus = self.inst.config.data.paus_mellan_bolag_sek
         for nr, ticker in enumerate(tickers, start=1):
             logg.info("[%d/%d] %s", nr, len(tickers), ticker)
             bd = self._ett_bolag(ticker, idag, tvinga, cache_dagar, rapport)
             if bd is not None:
                 rapport.data[ticker] = bd
+            if paus and nr < len(tickers):
+                time.sleep(paus)
         logg.info("hämtning klar: %s", rapport.sammanfattning())
         return rapport
 
@@ -127,7 +140,12 @@ class Hamtare:
                 logg.debug("%s: ur cachen (%d dagar gammal)", ticker, alder)
 
         if bd is None:
-            bd = self.provider.hamta(ticker, idag)
+            # Skicka med vad vi redan vet. Yahoo utelämnar ibland
+            # rapportvalutan, och utan den kan räkenskaperna inte
+            # valutasäkras.
+            bd = self.provider.hamta(
+                ticker, idag, kand_meta=self.lager.senast_kanda_meta(ticker, idag)
+            )
 
         fyllda = self.csv.komplettera(bd)
         if fyllda:
