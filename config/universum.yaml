@@ -54,7 +54,8 @@ kategorier:
       - NDA-SE.ST      # Nordea
       - AZA.ST         # Avanza
       - SAVE.ST        # Nordnet
-      - RESURS.ST      # Resurs Holding
+      # - RESURS.ST    # Resurs Holding -- avstängt 2026-11-13: Yahoo svarar
+      #                 inte på någon stavning. Bolaget är utköpt från börsen.
       - NORION.ST      # Norion Bank
 
   Investmentbolag:
@@ -140,7 +141,10 @@ kategorier:
       - ATRLJ-B.ST     # Atrium Ljungberg
       - NP3.ST         # NP3 Fastigheter
       - CATE.ST        # Catena
-      - NYF.ST         # Nyfosa
+      # - NYF.ST       # Nyfosa -- avstängt 2026-11-13: Yahoo svarar inte på
+      #                 NYF.ST, NYFOSA.ST eller NYF-B.ST. Hittar du rätt
+      #                 ticker på finance.yahoo.com, ta bort # och kör
+      #                 hamta-data --bolag <ticker> för att prova den.
       - PNDX-B.ST      # Pandox
       - CORE-B.ST      # Corem Property
       - SBB-B.ST       # Samhallsbyggnadsbolaget
