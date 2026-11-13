@@ -60,10 +60,16 @@ def test_bank_och_fastighet_anvander_sektorsmatt():
     assert "nettoskuld_ebitda" not in bank
 
     fastighet = inst.mattuppsattning_for("Fastighet").alla_matt()
-    assert "forvaltningsresultat_per_aktie_tillvaxt" in fastighet
     assert "belaningsgrad" in fastighet
     assert "rantetackningsgrad" in fastighet
     assert "kurs_mot_substans" in fastighet
+    assert "kurs_mot_forvaltningsresultat" in fastighet
+    # Kvalitet mäts på substansvärdets utveckling, inte på
+    # förvaltningsresultatets. Skälet är uppmätt: förvaltningsresultatet
+    # härleds ur yfinance med ett riktningsfel mellan åren, vilket gör
+    # ett tillväxtmått opålitligt. Se tests/test_harledda.py.
+    assert "substansvarde_tillvaxt" in fastighet
+    assert "forvaltningsresultat_per_aktie_tillvaxt" not in fastighet
 
     inv = inst.mattuppsattning_for("Investmentbolag").alla_matt()
     assert "substansrabatt_mot_historik" in inv

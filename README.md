@@ -205,8 +205,8 @@ rättvist. De fyller du i i `data/manuellt/`:
 
 | Fil | För vilka | Vad du fyller i |
 |---|---|---|
-| `substansvarden.csv` | Investmentbolag, fastighet | substansvärde per aktie, och totalt |
-| `fastighetsdata.csv` | Fastighet | förvaltningsresultat per aktie, belåningsgrad, räntetäckningsgrad |
+| `substansvarden.csv` | Investmentbolag | substansvärde per aktie, och totalt -- **behövs**, går inte att härleda |
+| `fastighetsdata.csv` | Fastighet | förvaltningsresultat per aktie, belåningsgrad, räntetäckningsgrad -- **frivilligt**, härleds annars automatiskt |
 | `bankdata.csv` | Bank/finans | kärnprimärkapitalrelation (CET1) |
 
 **Filerna är redan förifyllda med rader** för de bolag som behöver dem
@@ -247,6 +247,78 @@ Fyra regler, som alla ger tydliga felmeddelanden om du bryter dem:
 Du behöver bara fylla i de bolag du faktiskt vill kunna jämföra. Ett
 fastighetsbolag utan förvaltningsresultat utesluts ur sin kategori och
 listas i rapporten med orsak -- det får aldrig en gissad siffra.
+
+---
+
+## Härledda mått -- proxyvärden för fastighetsbolag
+
+Fastighetsbolagens nyckeltal (förvaltningsresultat, belåningsgrad,
+räntetäckningsgrad, substansvärde) är **alternativa nyckeltal**, inte
+IFRS-poster. Varje bolag definierar och publicerar dem i sin egen
+rapport, och de finns därför inte i någon fri maskinläsbar källa.
+
+De går däremot att närma sig ur de råposter yfinance faktiskt ger.
+Programmet gör det automatiskt för fastighetskategorin. Noggrannheten
+är **uppmätt mot Castellums egen nyckeltalsredovisning för 2025**, inte
+antagen:
+
+| Mått | Härleds ur | Härlett | Castellums verkliga | Avvikelse |
+|---|---|---|---|---|
+| Belåningsgrad | skulder / tillgångar | 37,3 % | 37 % | nästan exakt |
+| Substansvärde/aktie | eget kapital / aktier | 159,1 kr | 160 kr | 0,6 % |
+| Förvaltningsresultat/aktie | (EBIT − ränta) / aktier | 8,02 kr | 9,36 kr | 14 % lågt |
+| Räntetäckningsgrad | EBIT / räntekostnad | 2,76 | 3 | lågt |
+
+Förvaltningsresultatet blir för lågt eftersom räntekostnaden är brutto;
+den verkliga definitionen använder finansnetto och räknar in resultat
+från samägda bolag. Avvikelsen går i samma riktning för alla bolag, som
+redovisar under samma regler, så den **rangordning** poängmodellen
+använder påverkas betydligt mindre än nivån.
+
+### Två mätningar som ändrade konstruktionen
+
+**Förvaltningsresultatets tillväxt härleds inte.** Proxyn ligger inte
+bara lågt -- den pekar åt fel håll mellan åren. Castellums verkliga tal
+gick 9,69 → 9,78 → 9,36 kronor per aktie; proxyn gick 8,00 → 7,50 →
+8,02. Ett jämnt nivåfel går att leva med i en rangordning, men ett
+riktningsfel gör ett *tillväxtmått* aktivt vilseledande. Fastighets
+kvalitetsmått är därför **substansvärdets utveckling**, som härleds med
+0,6 procents fel. Vill du ha förvaltningsresultatets tillväxt i stället:
+skriv in de verkliga talen i `data/manuellt/fastighetsdata.csv` och byt
+måttet i `config.yaml`.
+
+**Tal per aktie använder räkenskapernas aktieantal.** Yahoos `info`
+påstår att Castellum har 426 miljoner aktier; balansräkningen säger 492
+miljoner, vilket stämmer med bolagets eget förvaltningsresultat per
+aktie. Härledda tal per aktie använder därför räkenskapernas eget
+aktieantal, år för år -- så att Castellums nyemission 2023 (391 → 493
+miljoner aktier) räknas rätt i historiken.
+
+### Investmentbolag härleds aldrig
+
+Samma härledning för investmentbolag hade varit systematiskt fel:
+
+| Bolag | Eget kapital per aktie | Rapporterat substansvärde |
+|---|---|---|
+| Investor | 311 kr | ungefär detsamma |
+| Latour | 67 kr | flera gånger högre |
+
+Investor och Industrivärden redovisar innehav till **marknadsvärde**, så
+eget kapital *är* substansvärdet. Latour redovisar industrirörelsen till
+**bokfört värde**. Att rangordna dem mot varandra på bokfört eget
+kapital hade gjort Latour till Sveriges dyraste bolag. Investmentbolagens
+substansvärden måste komma från bolagens egen rapportering -- det är de
+18 talen i `data/manuellt/substansvarden.csv`.
+
+### Se vad som är proxyvärde
+
+```bash
+python -m aktieanalys visa-bolag CAST.ST
+```
+
+Står det `härlett ur ...` i källkolumnen är talet ett proxyvärde, med
+den uppmätta noggrannheten angiven. Står det `csv:` är det ett tal du
+själv skrivit in -- och **verkliga tal vinner alltid över härledda**.
 
 ---
 

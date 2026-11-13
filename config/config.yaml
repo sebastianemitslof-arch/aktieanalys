@@ -110,9 +110,18 @@ poang:
 
     # Fastighetsbolag. Redovisad vinst svänger med orealiserade
     # värdeförändringar, därför används förvaltningsresultatet i stället.
+    #
+    # Kvalitet mäts på substansvärdets utveckling, inte på
+    # förvaltningsresultatets. Skälet är mätt, inte principiellt:
+    # förvaltningsresultatet härleds ur yfinance med ett nivåfel på ca
+    # 14 procent OCH ett riktningsfel mellan åren, vilket gör ett
+    # tillväxtmått opålitligt. Substansvärdet härleds med 0,6 procents
+    # fel. Har du skrivit in verkliga förvaltningsresultat i
+    # data/manuellt/fastighetsdata.csv kan du byta tillbaka till
+    # forvaltningsresultat_per_aktie_tillvaxt här.
     fastighet:
       kvalitet:
-        forvaltningsresultat_per_aktie_tillvaxt: 1.00
+        substansvarde_tillvaxt: 1.00
       vardering:
         kurs_mot_substans: 0.55
         kurs_mot_forvaltningsresultat: 0.45

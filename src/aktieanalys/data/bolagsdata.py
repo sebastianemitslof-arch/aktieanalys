@@ -70,6 +70,11 @@ FALT: dict[str, Faltdef] = {
            "Resultat efter skatt per år. Grund för vinststabilitet."),
         _f("vinst_per_aktie_historik", "arslista", "resultat", "kr",
            "Vinst per aktie per år. Grund för historisk P/E."),
+        _f("rantekostnad", "tal", "resultat", "kr",
+           "Räntekostnad, som positivt tal. Nämnare i räntetäckningsgraden "
+           "och avdrag i det härledda förvaltningsresultatet."),
+        _f("rantekostnad_historik", "arslista", "resultat", "kr",
+           "Räntekostnad per år, som positiva tal."),
 
         # ---------------- Balansräkning ----------------
         _f("eget_kapital", "tal", "balans", "kr", "Eget kapital hänförligt till aktieägarna."),
@@ -81,6 +86,19 @@ FALT: dict[str, Faltdef] = {
         _f("antal_aktier", "tal", "balans", "st", "Antal utestående aktier."),
         _f("bolagsvarde", "tal", "balans", "kr",
            "Börsvärde plus nettoskuld (enterprise value). Täljaren i EV/EBIT."),
+        _f("totala_tillgangar", "tal", "balans", "kr",
+           "Balansomslutning. För ett fastighetsbolag är fastigheterna "
+           "nästan hela tillgångssidan, vilket gör måttet användbart som "
+           "nämnare i belåningsgraden."),
+        _f("rantebarande_skulder", "tal", "balans", "kr",
+           "Räntebärande skulder, brutto (utan avdrag för kassa). Täljaren "
+           "i belåningsgraden."),
+        _f("eget_kapital_historik", "arslista", "balans", "kr",
+           "Eget kapital per år. Grund för härledd substansvärdeshistorik."),
+        _f("antal_aktier_historik", "arslista", "balans", "st",
+           "Antal aktier per år. Behövs för att räkna historiska tal PER "
+           "AKTIE korrekt -- bolag som nyemitterat skulle annars få sin "
+           "historik räknad på dagens aktieantal."),
 
         # ---------------- Manuellt kompletterade ----------------
         # Finns inte i yfinance. Fylls i via CSV-filerna i data/manuellt/.

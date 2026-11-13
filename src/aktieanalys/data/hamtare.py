@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 
 from aktieanalys.data.bolagsdata import MANUELLA_FALT, Bolagsdata
 from aktieanalys.data.csv_komplettering import CsvKomplettering
+from aktieanalys.data.harledda import Harledare
 from aktieanalys.data.lager import Lager
 from aktieanalys.data.provider import Provider
 from aktieanalys.data.valuta import Valutaomraknare
@@ -67,6 +68,7 @@ class Hamtare:
         provider: Provider | None = None,
         lager: Lager | None = None,
         csv: CsvKomplettering | None = None,
+        harledare: Harledare | None = None,
     ) -> None:
         self.inst = inst
         c = inst.config
@@ -86,6 +88,7 @@ class Hamtare:
             ),
         )
         self.csv = csv if csv is not None else CsvKomplettering(inst.manuell_katalog)
+        self.harledare = harledare if harledare is not None else Harledare()
 
     # =================================================================
     def hamta(
@@ -157,9 +160,20 @@ class Hamtare:
                 ticker, idag, kand_meta=self.lager.senast_kanda_meta(ticker, idag)
             )
 
+        # Ordningen är viktig: CSV först, härledning sedan. Verkliga tal
+        # du skrivit in vinner alltid över proxyvärden.
         fyllda = self.csv.komplettera(bd)
         if fyllda:
             logg.debug("%s: %d fält från CSV", ticker, fyllda)
+
+        kategori = self.inst.kategori_for(ticker)
+        if kategori:
+            harledda = self.harledare.harled(
+                bd, self.inst.universum.kategorier[kategori].mattuppsattning
+            )
+            if harledda:
+                logg.debug("%s: %d härledda fält", ticker, harledda)
+
         self._markera_kvarvarande_manuella(bd)
 
         if bd.antal_varden == 0:

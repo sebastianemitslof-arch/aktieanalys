@@ -342,6 +342,7 @@ class YfinanceProvider(Provider):
                 "omsattning", "rorelseresultat", "nettoresultat",
                 "omsattning_historik", "rorelseresultat_historik",
                 "nettoresultat_historik", "vinst_per_aktie_historik",
+                "rantekostnad", "rantekostnad_historik",
             ):
                 bd.markera_saknat(falt, "Yahoo gav ingen resultaträkning")
             vaxling.satt("ebitda", _tal(info, "ebitda"), "yfinance:info")
@@ -358,6 +359,9 @@ class YfinanceProvider(Provider):
                 "Net Income Continuous Operations",
             ),
             "vinst_per_aktie_historik": ("Diluted EPS", "Basic EPS"),
+            # Räntekostnaden behövs för fastighetsbolagens räntetäckningsgrad
+            # och för det härledda förvaltningsresultatet.
+            "rantekostnad_historik": ("Interest Expense", "Interest Expense Non Operating"),
         }
         for falt, kandidater in par.items():
             serie = _arsserie(resultat, *kandidater)
@@ -369,6 +373,10 @@ class YfinanceProvider(Provider):
                 )
                 continue
             serie = serie[: self.ar_historik]
+            if falt == "rantekostnad_historik":
+                # Yahoo anger räntekostnad ibland positivt, ibland negativt.
+                # Måtten förutsätter ett positivt belopp.
+                serie = [(ar, abs(v)) for ar, v in serie]
             vaxling.satt_serie(falt, serie, f"{kalla} ({len(serie)} år)")
             if len(serie) < self.ar_historik:
                 logg.debug(
@@ -382,6 +390,7 @@ class YfinanceProvider(Provider):
             ("omsattning", "omsattning_historik"),
             ("rorelseresultat", "rorelseresultat_historik"),
             ("nettoresultat", "nettoresultat_historik"),
+            ("rantekostnad", "rantekostnad_historik"),
         ]:
             serie = bd.varde(historikfalt)
             if serie:
@@ -441,6 +450,32 @@ class YfinanceProvider(Provider):
         _, aktier = _senaste_med_ar(balans, "Ordinary Shares Number", "Share Issued")
         ar_inv, investerat = _senaste_med_ar(balans, "Invested Capital")
         ar_netto, nettoskuld = _senaste_med_ar(balans, "Net Debt")
+        ar_tillg, tillgangar = _senaste_med_ar(balans, "Total Assets")
+
+        # Balansomslutning och bruttoskuld: nämnare och täljare i
+        # fastighetsbolagens belåningsgrad.
+        vaxling.satt("totala_tillgangar", tillgangar, kalla, ar_tillg)
+        vaxling.satt("rantebarande_skulder", skulder, kalla, ar_skuld)
+
+        # Årsserier för härledda mått per aktie. Antalet aktier per år
+        # behövs för att historiska tal per aktie inte ska räknas på
+        # dagens aktieantal.
+        vaxling.satt_serie(
+            "eget_kapital_historik",
+            (_arsserie(balans, "Stockholders Equity",
+                       "Total Equity Gross Minority Interest") or [None])[: self.ar_historik]
+            if _arsserie(balans, "Stockholders Equity",
+                         "Total Equity Gross Minority Interest") else None,
+            f"{kalla} (eget kapital per år)",
+        )
+        aktieserie = _arsserie(balans, "Ordinary Shares Number", "Share Issued")
+        if aktieserie:
+            # Styckantal -- räknas aldrig om till kronor.
+            bd.satt("antal_aktier_historik", aktieserie[: self.ar_historik],
+                    f"{kalla} ({len(aktieserie[: self.ar_historik])} år)")
+        else:
+            bd.markera_saknat("antal_aktier_historik",
+                              "raden Ordinary Shares Number saknades")
 
         # Antal aktier är ett styckantal och räknas aldrig om.
         # Info är färskare än balansräkningen.
