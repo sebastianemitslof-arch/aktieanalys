@@ -172,6 +172,26 @@ class Hamtare:
             return bd
 
         self.lager.spara(bd)
+
+        # Läs tillbaka den sammanslagna bilden. Arkivet skriver aldrig
+        # över ett värde med ingenting, så ett fält som Yahoo missade
+        # just den här gången finns kvar från en tidigare hämtning.
+        # Rapporten ska visa vad systemet VET, inte vad ett enskilt
+        # anrop råkade ge -- annars står det "saknas" om data vi har.
+        sammanslagen = self.lager.las(ticker, idag)
+        if sammanslagen is not None:
+            for f in bd.fel:
+                sammanslagen.anteckna_fel(f)
+            if sammanslagen.antal_varden >= bd.antal_varden:
+                if sammanslagen.antal_varden > bd.antal_varden:
+                    logg.debug(
+                        "%s: %d fält ur arkivet utöver de %d som hämtades nu",
+                        ticker,
+                        sammanslagen.antal_varden - bd.antal_varden,
+                        bd.antal_varden,
+                    )
+                bd = sammanslagen
+
         self.lager.logga_hamtning(
             ticker,
             idag,

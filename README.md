@@ -243,7 +243,11 @@ Står det "omräknat från USD" i källkolumnen har omräkningen gjorts.
 **Cache.** Data som hämtats nyligen hämtas inte igen. yfinance är
 inofficiellt och tål inte att pressas.
 
-**Arkiv.** Varje hämtning sparas med datum och skrivs aldrig över.
+**Arkiv.** Varje hämtning sparas med datum och skrivs aldrig över med
+ingenting. Missar Yahoo ett nyckeltal en vecka behålls förra veckans
+värde, och rapporten visar hur gammalt det är. Det betyder också att
+täckningssiffrorna speglar vad systemet **vet**, inte vad ett enskilt
+anrop råkade ge -- något annat hade skrivit "saknas" om data vi har.
 Frågar man databasen "vad visste vi den 3 maj?" får man svaret som
 gällde då, inte dagens siffror. Det är den enda delen av projektet som
 inte går att återskapa -- **radera den aldrig.** Den ligger med i
@@ -404,6 +408,13 @@ mer detaljer än det som skrivs på skärmen.
 eller med fel. Programmet gör om försök och loggar problem, men enstaka
 nyckeltal kommer att saknas för enstaka bolag. Rapporten visar alltid
 vad som saknades.
+
+Yahoo **stryper anrop** efter ungefär 90 i rad och börjar då svara med
+ofullständiga uppgifter -- vilket är värre än att inte svara, eftersom
+det ser ut att ha gått bra. Programmet pausar därför 0,7 sekunder mellan
+bolagen, och arkivet behåller tidigare värden så att en strypt körning
+inte raderar något. Kör du `hamta-data --tvinga` flera gånger i rad är
+det väntat att Yahoo blir snål -- vänta en stund och kör igen.
 
 **Vissa uppgifter finns inte alls i yfinance** och måste fyllas i för
 hand i CSV-filer i `data/manuellt/`: substansvärden för investmentbolag,

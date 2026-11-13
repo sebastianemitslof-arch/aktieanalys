@@ -302,3 +302,87 @@ def test_provider_som_hojer_undantag_stoppar_inte_korningen(inst):
         assert rapport.antal == 2
     finally:
         h.stang()
+
+
+# =====================================================================
+#  Rapporten ska visa vad systemet vet, inte vad ett anrop gav
+# =====================================================================
+def test_falt_som_yahoo_missade_denna_gang_rapporteras_inte_som_saknat(inst):
+    """Yahoo strypte anropen och utelämnade börsvärdet för tio bolag,
+    trots att en tidigare hämtning samma dag hade det. Då ska rapporten
+    inte skriva 'saknas' om data vi faktiskt har."""
+    class Nyckfull(Provider):
+        namn = "nyckfull"
+
+        def __init__(self):
+            self.komplett = True
+
+        def hamta(self, ticker, idag=None, kand_meta=None):
+            bd = Bolagsdata(ticker=ticker, hamtad=idag or IDAG, namn=ticker)
+            bd.satt("kurs", 100.0, "nyckfull")
+            if self.komplett:
+                bd.satt("borsvarde", 50e9, "nyckfull")
+            else:
+                bd.markera_saknat("borsvarde", "tomt svar från Yahoo")
+            return bd
+
+    kalla = Nyckfull()
+    h = bygg(inst, kalla)
+    try:
+        forst = h.hamta(["VOLV-B.ST"], idag=IDAG)
+        assert forst.data["VOLV-B.ST"].varde("borsvarde") == 50e9
+
+        kalla.komplett = False                     # nu stryper Yahoo
+        sen = h.hamta(["VOLV-B.ST"], tvinga=True, idag=IDAG)
+        bd = sen.data["VOLV-B.ST"]
+        assert bd.har("borsvarde"), "börsvärdet finns i arkivet och ska rapporteras"
+        assert bd.varde("borsvarde") == 50e9
+    finally:
+        h.stang()
+
+
+def test_faltalder_visar_vilka_varden_som_borjar_bli_gamla(inst):
+    class Kalla(Provider):
+        namn = "kalla"
+
+        def __init__(self):
+            self.med_borsvarde = True
+
+        def hamta(self, ticker, idag=None, kand_meta=None):
+            bd = Bolagsdata(ticker=ticker, hamtad=idag or IDAG, namn=ticker)
+            bd.satt("kurs", 100.0, "kalla")
+            if self.med_borsvarde:
+                bd.satt("borsvarde", 50e9, "kalla")
+            return bd
+
+    kalla = Kalla()
+    h = bygg(inst, kalla)
+    try:
+        h.hamta(["VOLV-B.ST"], idag=dt.date(2026, 9, 1))
+        kalla.med_borsvarde = False
+        bd = h.hamta(["VOLV-B.ST"], idag=IDAG).data["VOLV-B.ST"]
+
+        assert bd.alder_i_dagar("kurs", IDAG) == 0
+        assert bd.alder_i_dagar("borsvarde", IDAG) == 73
+        assert "borsvarde" in bd.aldre_an(30, IDAG)
+        assert "kurs" not in bd.aldre_an(30, IDAG)
+    finally:
+        h.stang()
+
+
+def test_fel_fran_hamtningen_foljer_med_den_sammanslagna_bilden(inst):
+    class Gnallig(Provider):
+        namn = "gnallig"
+
+        def hamta(self, ticker, idag=None, kand_meta=None):
+            bd = Bolagsdata(ticker=ticker, hamtad=idag or IDAG, namn=ticker)
+            bd.satt("kurs", 100.0, "gnallig")
+            bd.anteckna_fel("valutakrock SEK/EUR")
+            return bd
+
+    h = bygg(inst, Gnallig())
+    try:
+        bd = h.hamta(["NDA-SE.ST"], idag=IDAG).data["NDA-SE.ST"]
+        assert any("valutakrock" in f for f in bd.fel)
+    finally:
+        h.stang()

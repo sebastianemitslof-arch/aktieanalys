@@ -154,6 +154,12 @@ class Bolagsdata:
     saknade: dict[str, str] = field(default_factory=dict)
     """Fält som saknas, med orsak i klartext."""
 
+    faltdatum: dict[str, dt.date] = field(default_factory=dict)
+    """Vilket hämtdatum varje fält kommer från. Fylls när data läses ur
+    databasen. Ett fält kan vara äldre än de andra om datakällan slutade
+    leverera det en vecka -- då behålls det gamla värdet, och rapporten
+    kan visa att det börjar bli gammalt."""
+
     fel: list[str] = field(default_factory=list)
     """Tekniska problem vid hämtningen (timeout, tomt svar, undantag)."""
 
@@ -201,6 +207,21 @@ class Bolagsdata:
     @property
     def antal_varden(self) -> int:
         return len(self.varden)
+
+    def alder_i_dagar(self, falt: str, idag: dt.date | None = None) -> int | None:
+        """Hur gammalt ett fälts värde är. None om datumet inte är känt."""
+        _kontrollera(falt)
+        datum = self.faltdatum.get(falt)
+        return None if datum is None else ((idag or dt.date.today()) - datum).days
+
+    def aldre_an(self, dagar: int, idag: dt.date | None = None) -> dict[str, int]:
+        """Fält vars värden är äldre än så här många dagar."""
+        ut = {}
+        for falt in self.varden:
+            alder = self.alder_i_dagar(falt, idag)
+            if alder is not None and alder > dagar:
+                ut[falt] = alder
+        return ut
 
     def sammanfattning(self) -> str:
         bit = f"{self.ticker}: {self.antal_varden} fält"

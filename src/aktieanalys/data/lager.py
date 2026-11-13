@@ -254,6 +254,7 @@ class Lager:
             if FALT[falt].typ == "arslista" and varde is not None:
                 varde = [tuple(x) for x in varde]
             bd.satt(falt, varde, r["kalla"] or "databas")
+            bd.faltdatum[falt] = dt.date.fromisoformat(r["datum"])
 
         if kurser is not None and not kurser.empty:
             bd.satt("kurshistorik", kurser, "databas")
