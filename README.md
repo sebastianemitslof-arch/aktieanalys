@@ -21,7 +21,7 @@ konfigurationen.
 | 3 | Universum: filtrering och datatäckningskontroll | **klart** |
 | 4 | Poängmodellen | **klart** |
 | 5 | Kvalitativt lager (Claude) | **klart** |
-| 6 | Bytesregler och kostnadsberäkning | kommer |
+| 6 | Bytesregler och kostnadsberäkning | **klart** |
 | 7 | Veckorapport som HTML och mejl | kommer |
 | 8 | Schemaläggning via GitHub Actions | kommer |
 | 9 | Backtest mot OMXS30 | kommer |
@@ -250,6 +250,91 @@ Fyra regler, som alla ger tydliga felmeddelanden om du bryter dem:
 Du behöver bara fylla i de bolag du faktiskt vill kunna jämföra. Ett
 fastighetsbolag utan förvaltningsresultat utesluts ur sin kategori och
 listas i rapporten med orsak -- det får aldrig en gissad siffra.
+
+---
+
+## Bytesreglerna
+
+```bash
+python -m aktieanalys visa-byten
+```
+
+Fyra villkor, som alla måste hålla samtidigt:
+
+| Villkor | Standard | Varför |
+|---|---|---|
+| **Tröskel** | utmanaren +20 % | små skillnader i poäng är brus |
+| **Uthållighet** | 3 rapporter i rad | en enstaka veckas utslag ska inte räcka |
+| **Innehavstid** | minst 12 månader | skyddar mot att jaga det som nyss gått bra |
+| **Beslutsfönster** | kvartalsvis | besluten ska vila på färska rapporter |
+
+Beslutsfönstren ligger efter de svenska rapportperioderna: 15 feb--15 mar,
+15 maj--15 jun, 15 aug--15 sep, 15 nov--15 dec. Övriga veckor är
+rapporten **enbart bevakning**.
+
+### Rapporten visar allt, inte bara det som brister
+
+```
+Industri
+  innehav:  B1.ST           48.5 poäng
+  utmanare: B6.ST           69.8 poäng (+43.9 %)
+   + tröskel          utmanaren är +43.9 % bättre (kravet är +20 %)
+   - uthållighet      2 av 3 veckorapporter i rad
+   + innehavstid      34.2 av 12 månader
+   + beslutsfönster   inom beslutsfönster
+```
+
+Att en utmanare är 44 procent bättre men bara varit det i två veckor är
+något du ska få se, inte något som ska tigas ihjäl. Tecknen betyder:
+`+` uppfyllt, `-` ej uppfyllt, `~` åsidosatt av flaggad försämring.
+
+### Undantaget
+
+Flaggar det kvalitativa lagret **fundamental försämring** i ditt eget
+innehav -- vinstvarning, indragen prognos -- åsidosätts kravet på
+innehavstid och beslutsfönster. Tröskeln och uthålligheten gäller
+fortfarande: att ditt innehav försämrats gör inte automatiskt någon
+annan värd att köpa.
+
+Undantaget gäller bara försämring i det egna innehavet, aldrig hos en
+utmanare. Stäng av det med `byten.tillat_undantag_vid_riskflagga: false`.
+
+### Kostnaden
+
+Courtage på båda affärerna plus halva spreaden per affär. Spreaden mäts
+ur verklig köp- och säljkurs när den finns, annars används golvet i
+`config.yaml`. Kontot är ett ISK, så ingen vinstskatt räknas in.
+
+```
+   kostnad: 325 kr av 50,000 kr (0.65 %, antagen position)
+            sälj 125 kr + köp 125 kr + spread 75 kr (uppmätt 0.08 %, höjd till golvet)
+            ISK: ingen vinstskatt vid försäljning
+```
+
+Fyller du i `antal` i `portfolj.yaml` räknas kostnaden på din verkliga
+position i stället för på `antagen_positionsstorlek_kr`.
+
+**Kostnaden dras inte från poängen.** Poängen är en relativ rangordning,
+inte en avkastningsprognos, så det finns inget ärligt sätt att kvitta
+kronor mot poäng. Kostnaden är ett underlag för ditt beslut, inte en
+term i en formel. Överstiger den `varna_over_procent` av positionen
+flaggas det särskilt.
+
+### Veckologgen -- krävs för uthållighetsregeln
+
+Uthållighetsregeln kan bara räknas om varje veckas poäng sparas:
+
+```bash
+python -m aktieanalys visa-byten --spara
+```
+
+Det skriver veckans poäng till tabellen `veckopoang`. Kör du utan
+`--spara` räknas reglerna som vanligt men historiken växer inte, och
+nästa vecka saknas den veckan i kedjan. Veckokörningen i steg 8 sparar
+alltid.
+
+Dagens poäng tas alltid från den färska körningen, aldrig ur databasen,
+så en omkörning samma dag kan inte räknas två gånger.
 
 ---
 
@@ -594,9 +679,9 @@ gällde då, inte dagens siffror. Det är den enda delen av projektet som
 inte går att återskapa -- **radera den aldrig.** Den ligger med i
 repot med flit.
 
-Fem tabeller: `fundamenta` (ett värde per bolag, fält och hämtdatum),
+Sex tabeller: `fundamenta` (ett värde per bolag, fält och hämtdatum),
 `kurser` (daglig stängningskurs, även valutakurser), `bolagsmeta`
-(namn och valutor), `saknat` (vad som saknades och varför)
+(namn och valutor), `veckopoang` (varje veckas poäng), `saknat` (vad som saknades och varför)
 och `hamtlogg` (varje hämtningsförsök och hur det gick).
 
 ---

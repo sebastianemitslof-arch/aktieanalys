@@ -170,6 +170,8 @@ class Kostnadsinstallningar(_Bas):
     courtage_min_kr: float = Field(ge=0)
     spread_golv_procent: float = Field(ge=0, le=5)
     isk: bool
+    antagen_positionsstorlek_kr: float = Field(default=50000, gt=0)
+    varna_over_procent: float = Field(default=1.0, ge=0, le=100)
 
 
 class Mejlinstallningar(_Bas):

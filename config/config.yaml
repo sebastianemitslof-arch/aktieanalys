@@ -246,6 +246,16 @@ kostnader:
   # inte in i bytets kostnad.
   isk: true
 
+  # Hur stor en position antas vara när portfolj.yaml inte säger det.
+  # Fyller du i antal och anskaffningskurs där används det verkliga
+  # värdet i stället. Påverkar bara kostnadsberäkningen, inte poängen.
+  antagen_positionsstorlek_kr: 50000
+
+  # Varna i rapporten när ett bytes totala kostnad överstiger så här
+  # stor del av positionen. Ett byte som kostar mer än en procent av
+  # beloppet kräver en tydligt bättre utmanare för att löna sig.
+  varna_over_procent: 1.0
+
 
 # ---------------------------------------------------------------------
 #  VECKORAPPORTEN

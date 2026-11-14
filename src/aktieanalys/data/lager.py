@@ -17,6 +17,7 @@ Tabellerna:
   bolagsmeta  namn och valutor per bolag och hämtdatum
   kurser      daglig stängningskurs och volym
   saknat      vilka fält som saknades, med orsak
+  veckopoang  varje veckas poäng per bolag -- grunden för bytesreglerna
   hamtlogg    varje hämtningsförsök och hur det gick
 """
 
@@ -71,6 +72,19 @@ CREATE TABLE IF NOT EXISTS saknat (
     orsak  TEXT NOT NULL,
     PRIMARY KEY (ticker, datum, falt)
 );
+
+CREATE TABLE IF NOT EXISTS veckopoang (
+    datum              TEXT NOT NULL,
+    ticker             TEXT NOT NULL,
+    kategori           TEXT NOT NULL,
+    poang_kvantitativ  REAL,
+    poang_slutlig      REAL,
+    placering          INTEGER,
+    ar_innehav         INTEGER NOT NULL DEFAULT 0,
+    justering          REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (datum, ticker)
+);
+CREATE INDEX IF NOT EXISTS ix_veckopoang ON veckopoang (kategori, datum);
 
 CREATE TABLE IF NOT EXISTS hamtlogg (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -348,6 +362,7 @@ class Lager:
             "kursrader": q("SELECT COUNT(*) FROM kurser"),
             "saknade_varden": q("SELECT COUNT(*) FROM saknat"),
             "hamtningar": q("SELECT COUNT(*) FROM hamtlogg"),
+            "veckorapporter": q("SELECT COUNT(DISTINCT datum) FROM veckopoang"),
             "bolag_med_valuta": q(
                 "SELECT COUNT(DISTINCT ticker) FROM bolagsmeta "
                 "WHERE rapportvaluta IS NOT NULL"
@@ -357,6 +372,68 @@ class Lager:
             "storlek_kb": round(self.vag.stat().st_size / 1024, 1)
             if self.vag.exists()
             else 0,
+        }
+
+    # =================================================================
+    #  Veckopoäng
+    # =================================================================
+    def spara_veckopoang(self, datum: dt.date, rader: list[dict]) -> int:
+        """Sparar en veckas poäng. Kör man om samma dag skrivs den över.
+
+        Det är den här historiken bytesreglerna läser för att avgöra om
+        en utmanare varit bättre flera veckor i rad. Utan den skulle ett
+        byte kunna utlösas av en enda veckas brus.
+        """
+        with self.db:
+            self.db.executemany(
+                "INSERT OR REPLACE INTO veckopoang (datum, ticker, kategori, "
+                "poang_kvantitativ, poang_slutlig, placering, ar_innehav, "
+                "justering) VALUES (?,?,?,?,?,?,?,?)",
+                [
+                    (
+                        datum.isoformat(), r["ticker"], r["kategori"],
+                        r.get("poang_kvantitativ"), r.get("poang_slutlig"),
+                        r.get("placering"), int(r.get("ar_innehav", False)),
+                        r.get("justering", 0.0),
+                    )
+                    for r in rader
+                ],
+            )
+        logg.info("sparade veckopoäng för %d bolag per %s", len(rader), datum)
+        return len(rader)
+
+    def rapportdatum(
+        self, kategori: str | None = None, till: dt.date | None = None
+    ) -> list[dt.date]:
+        """Alla datum som har loggad veckopoäng, nyast först."""
+        villkor, param = "", []
+        if kategori:
+            villkor += " AND kategori=?"
+            param.append(kategori)
+        if till:
+            villkor += " AND datum<=?"
+            param.append(till.isoformat())
+        rader = self.db.execute(
+            f"SELECT DISTINCT datum FROM veckopoang WHERE 1=1{villkor} "
+            f"ORDER BY datum DESC",
+            param,
+        ).fetchall()
+        return [dt.date.fromisoformat(r["datum"]) for r in rader]
+
+    def veckopoang_vid(self, datum: dt.date, kategori: str) -> dict[str, dict]:
+        """Poängen för en kategori ett visst rapportdatum, per ticker."""
+        return {
+            r["ticker"]: {
+                "poang_slutlig": r["poang_slutlig"],
+                "poang_kvantitativ": r["poang_kvantitativ"],
+                "placering": r["placering"],
+                "ar_innehav": bool(r["ar_innehav"]),
+                "justering": r["justering"],
+            }
+            for r in self.db.execute(
+                "SELECT * FROM veckopoang WHERE datum=? AND kategori=?",
+                (datum.isoformat(), kategori),
+            )
         }
 
     def harledda_falt(self) -> dict[str, int]:

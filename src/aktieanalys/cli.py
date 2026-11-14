@@ -556,6 +556,106 @@ def _visa_kvalitativ(args: argparse.Namespace) -> int:
     return 0
 
 
+def _visa_byten(args: argparse.Namespace) -> int:
+    import datetime as dt
+
+    from aktieanalys.byten import bedom_byten, spara_veckans_poang
+    from aktieanalys.data.lager import Lager
+    from aktieanalys.kvalitativ.klient import Kvalitativtlager
+    from aktieanalys.poang.modell import poangsatt
+    from aktieanalys.universum import las_och_valj
+
+    inst = las_installningar(args.config)
+    logg.satt_upp(inst.config.loggning.niva, inst.loggfil)
+    if not inst.databasvag.exists():
+        print("Databasen finns inte än. Kör först: python -m aktieanalys hamta-data")
+        return 1
+
+    datum = dt.date.fromisoformat(args.datum) if args.datum else None
+    urval, data = las_och_valj(inst, datum)
+    tavla = poangsatt(inst, urval, data, datum)
+
+    kvalitativt = Kvalitativtlager(inst).bedom_urval(
+        tavla, data, utan_llm=args.utan_llm
+    )
+
+    with Lager(inst.databasvag) as lager:
+        if args.spara:
+            antal = spara_veckans_poang(lager, tavla, kvalitativt)
+            print(f"Sparade veckans poäng för {antal} bolag per {tavla.datum}.\n")
+        beslut = bedom_byten(inst, tavla, data, lager, kvalitativt, datum)
+
+    c = inst.config.byten
+    print(f"Bytesbedömning per {beslut.datum}")
+    print(f"  krav: utmanaren {c.min_poangforbattring_procent:.0f} % bättre i "
+          f"{c.antal_veckor_i_rad} rapporter i rad, innehav minst "
+          f"{c.min_innehavstid_manader} mån")
+    print(f"  {beslut.sammanfattning()}\n")
+
+    for namn, kb in beslut.kategorier.items():
+        rubrik = f"{namn}"
+        if kb.foreslas:
+            rubrik += "   >>> FÖRSLAG <<<"
+        print(rubrik)
+        print("-" * max(len(rubrik), 20))
+
+        if kb.typ == "obedombar":
+            print(f"  {kb.motivering}\n")
+            continue
+
+        if kb.typ == "forstagangskop":
+            print(f"  inget innehav. Högst rankad: {kb.utmanare} "
+                  f"({kb.utmanarpoang:.1f} poäng)")
+        else:
+            print(f"  innehav:  {kb.innehav:14} "
+                  + (f"{kb.innehavspoang:5.1f} poäng" if kb.innehavspoang
+                     else "kan inte poängsättas"))
+            if kb.utmanare:
+                print(f"  utmanare: {kb.utmanare:14} {kb.utmanarpoang:5.1f} poäng "
+                      f"({kb.forbattring_procent:+.1f} %)")
+
+        if kb.undantag:
+            print(f"  UNDANTAG: {kb.undantag}")
+
+        for v in kb.villkor:
+            if v.undantaget and not v.uppfyllt:
+                markering = "~"
+            elif v.ok:
+                markering = "+"
+            else:
+                markering = "-"
+            print(f"   {markering} {v.namn:16} {v.text}")
+
+        if kb.datum_i_rad and len(kb.datum_i_rad) > 1:
+            print(f"     rapporter: "
+                  + ", ".join(d.isoformat() for d in kb.datum_i_rad))
+
+        if kb.kostnad:
+            k = kb.kostnad
+            kalla = "verklig position" if k.kand_positionsstorlek else "antagen position"
+            print(f"   kostnad: {k.total_kr:,.0f} kr av {k.belopp_kr:,.0f} kr "
+                  f"({k.total_procent:.2f} %, {kalla})")
+            delar = []
+            if k.courtage_salj:
+                delar.append(f"sälj {k.courtage_salj:.0f} kr")
+            delar.append(f"köp {k.courtage_kop:.0f} kr")
+            delar.append(f"spread {k.spread_kr:.0f} kr ({k.spread_kalla})")
+            print(f"            " + " + ".join(delar))
+            if k.hog(inst.config.kostnader.varna_over_procent):
+                print(f"   VARNING  kostnaden överstiger "
+                      f"{inst.config.kostnader.varna_over_procent} % av positionen")
+            if inst.config.kostnader.isk:
+                print("            ISK: ingen vinstskatt vid försäljning")
+
+        print(f"   {kb.motivering}\n")
+
+    print("+ uppfyllt   - ej uppfyllt   ~ åsidosatt av flaggad försämring")
+    if not args.spara:
+        print("\nVeckans poäng sparades INTE. Kör med --spara i veckokörningen, "
+              "annars kan uthållighetsregeln inte räknas nästa vecka.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="python -m aktieanalys",
@@ -645,6 +745,18 @@ def main(argv: list[str] | None = None) -> int:
                         help="hoppa över det kvalitativa lagret helt")
     p_kval.add_argument("--datum", metavar="ÅÅÅÅ-MM-DD")
     p_kval.set_defaults(func=_visa_kvalitativ)
+
+    p_byten = under.add_parser(
+        "visa-byten",
+        help="bytesreglerna: vilka villkor som håller och vilka som inte gör det",
+    )
+    p_byten.add_argument("--spara", action="store_true",
+                         help="skriv veckans poäng till databasen "
+                              "(krävs för uthållighetsregeln)")
+    p_byten.add_argument("--utan-llm", action="store_true", dest="utan_llm",
+                         help="hoppa över det kvalitativa lagret")
+    p_byten.add_argument("--datum", metavar="ÅÅÅÅ-MM-DD")
+    p_byten.set_defaults(func=_visa_byten)
 
     args = p.parse_args(argv)
     logg.satt_upp()
