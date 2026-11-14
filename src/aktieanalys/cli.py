@@ -906,6 +906,191 @@ def _backtest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _hitta_universum(args: argparse.Namespace) -> int:
+    from aktieanalys.hitta import sok_bolag, yaml_forslag
+
+    inst = las_installningar(args.config)
+    logg.satt_upp(inst.config.loggning.niva, inst.loggfil)
+    c = inst.config.universum
+
+    print(f"Söker svenska bolag över {c.min_borsvarde_mdr:.0f} mdr kr i "
+          f"börsvärde och {c.min_daglig_omsattning_mkr:.0f} mkr/dag.\n")
+    resultat = sok_bolag(inst, hamta_sektor=not args.snabb)
+
+    if resultat.fel:
+        print(f"Sökningen misslyckades: {resultat.fel}")
+        return 1
+
+    krockar = [k for k in resultat.nya if k.aktieslagskrock]
+    print(f"Yahoo gav {resultat.traffar} bolag över börsvärdesgränsen.")
+    print(f"{len(resultat.kandidater)} klarar även likviditetsgränsen.")
+    print(f"  {len(resultat.befintliga)} finns redan i universum.yaml")
+    print(f"  {len(resultat.nya)} är NYA, varav {len(krockar)} är ett annat")
+    print(f"      aktieslag av ett bolag som redan finns\n")
+
+    saknas = sorted(set(inst.alla_tickers())
+                    - {k.ticker for k in resultat.kandidater})
+    if saknas:
+        print(f"Bolag i din lista som screenern INTE hittade ({len(saknas)}):")
+        print(f"  {', '.join(saknas)}")
+        print("  (för små, för tunt handlade, eller inte i Yahoos urval)\n")
+
+    if not resultat.nya:
+        print("Inget nytt att lägga till.")
+        return 0
+
+    for kategori, bolag in sorted(resultat.per_kategori().items()):
+        print(f"{kategori}  ({len(bolag)} nya)")
+        for k in bolag:
+            rad = (f"  {k.ticker:14} {k.namn[:32]:33} "
+                   f"{k.borsvarde_mdr:6.0f} mdr {k.omsattning_mkr:6.0f} mkr/dag")
+            if k.aktieslagskrock:
+                rad += "  [ANNAT AKTIESLAG]"
+            print(rad)
+            if k.aktieslagskrock:
+                print(f"  {'':14} samma bolag som {k.aktieslagskrock} "
+                      f"-- ta bara med ETT aktieslag")
+            if k.anmarkning:
+                for bit in _radbryt(f"KONTROLLERA: {k.anmarkning}", 60):
+                    print(f"  {'':14} {bit}")
+        print()
+
+    if args.yaml:
+        print("=" * 68)
+        print("ATT KLISTRA IN I universum.yaml")
+        print("=" * 68)
+        print(yaml_forslag(resultat))
+    else:
+        print("Kör med --yaml för ett färdigt block att klistra in i "
+              "universum.yaml.")
+
+    print("\nLäs igenom innan du lägger till något. Kategoriindelningen "
+          "bygger på\nYahoos sektorer, som är för grova för bank och "
+          "finans: där ryms både\nstorbanker, försäkringsbolag och "
+          "investmentbolag, som ska bedömas på\nhelt olika mått.")
+    return 0
+
+
+def _utvardera(args: argparse.Namespace) -> int:
+    import datetime as dt
+
+    from aktieanalys.data.lager import Lager
+    from aktieanalys.utvardering import (
+        mat_information_coefficient,
+        mat_rangstabilitet,
+    )
+
+    inst = las_installningar(args.config)
+    logg.satt_upp(inst.config.loggning.niva, inst.loggfil)
+    if not inst.databasvag.exists():
+        print("Databasen finns inte än. Kör först: python -m aktieanalys hamta-data")
+        return 1
+
+    b = inst.config.backtest
+    start = dt.date.fromisoformat(args.fran) if args.fran else b.start
+    slut = dt.date.fromisoformat(args.till) if args.till else dt.date.today()
+
+    print("=" * 68)
+    print("HAR POÄNGEN NÅGOT SAMBAND MED EFTERFÖLJANDE AVKASTNING?")
+    print("=" * 68)
+    print("Backtestet mäter portföljen och domineras av slump. Det här")
+    print("mäter rangordningen i stället, med alla bolag vid varje")
+    print("tidpunkt -- hundra gånger fler datapunkter.\n")
+
+    with Lager(inst.databasvag) as lager:
+        data = {}
+        for ticker in inst.alla_tickers():
+            bd = lager.las(ticker, dt.date.today())
+            if bd is not None:
+                data[ticker] = bd
+
+    print(f"Mäter {start} till {slut}, {args.horisont} dagars horisont, "
+          f"{len(data)} bolag.\nDet tar en stund.\n")
+
+    resultat = mat_information_coefficient(
+        inst, data, start, slut,
+        horisont_dagar=args.horisont, steg_dagar=args.steg,
+        fordrojning_manader=b.rapportfordrojning_manader,
+    )
+
+    # Hur mycket rör sig rangordningen? Avgör hur många av perioderna
+    # som verkligen är oberoende vad.
+    import datetime as _dt
+
+    mitten = start + (slut - start) / 2
+    if (mitten - start).days > 300:
+        resultat.stabilitet = mat_rangstabilitet(
+            inst, data, start, start + _dt.timedelta(days=365),
+            fordrojning_manader=b.rapportfordrojning_manader,
+        )
+
+    if not resultat.perioder:
+        print("Inga perioder kunde mätas. Historiken räcker inte.")
+        for v in resultat.varningar:
+            print(f"  * {v}")
+        return 1
+
+    alla = resultat.sammanfatta()
+    oberoende = resultat.sammanfatta(resultat.oberoende)
+
+    print("=" * 68)
+    print("RESULTAT")
+    print("=" * 68)
+    print(f"  {'':28} {'överlappande':>14} {'oberoende':>12}")
+    print(f"  {'antal perioder':28} {alla['antal']:>14} {oberoende['antal']:>12}")
+    print(f"  {'genomsnittlig IC':28} {alla['medel']:>14.4f} "
+          f"{oberoende.get('medel', 0):>12.4f}")
+    print(f"  {'andel perioder över noll':28} {alla['andel_positiva']:>13.0f} % "
+          f"{oberoende.get('andel_positiva', 0):>11.0f} %")
+    if alla["antal"] > 1:
+        print(f"  {'t-värde (uppblåst)':28} {alla['t']:>14.2f} "
+              f"{oberoende.get('t', 0):>12.2f}")
+
+    band = resultat.nollband()
+    if band:
+        print("\nVAD GER REN SLUMP I SAMMA UPPSTÄLLNING?")
+        print(f"  {'slumpad poäng, medel':28} {band[0]:>14.4f}")
+        print(f"  {'5:e till 95:e percentilen':28} "
+              f"{band[1]:>7.4f} till {band[2]:.4f}")
+        if resultat.inom_bruset():
+            print("  Det uppmätta värdet ligger INOM detta band.")
+
+    if resultat.stabilitet:
+        print("\nRÖR SIG RANGORDNINGEN MELLAN ÅREN?")
+        for kategori, varde in sorted(resultat.stabilitet.items(),
+                                      key=lambda x: -x[1]):
+            etikett = "nästan oförändrad" if varde > 0.8 else (
+                "trögrörlig" if varde > 0.5 else "rörlig")
+            print(f"  {kategori:22} {varde:+7.2f}   {etikett}")
+        snitt = resultat.genomsnittlig_stabilitet()
+        print(f"  {'genomsnitt':22} {snitt:+7.2f}")
+
+    per_pelare = resultat.per_pelare()
+    if per_pelare:
+        print("\nVILKEN FAKTOR BAR INFORMATIONEN?")
+        print(f"  {'pelare':22} {'IC':>8} {'över noll':>12}")
+        for pelare, rad in sorted(per_pelare.items(),
+                                  key=lambda x: -x[1]["medel"]):
+            print(f"  {pelare:22} {rad['medel']:>8.4f} "
+                  f"{rad['andel_positiva']:>10.0f} %")
+
+    print("\n" + "-" * 68)
+    for rad in _radbryt(resultat.omdome(), 66):
+        print(f"  {rad}")
+    print("-" * 68)
+
+    print("\nTOLKNING AV SKALAN")
+    print("  IC omkring 0      ingen information alls")
+    print("  IC 0,02 - 0,05    svagt men användbart, vanligt för riktiga modeller")
+    print("  IC över 0,10      ovanligt starkt, misstänk ett fel i uppställningen")
+
+    print("\nVARNINGAR")
+    for v in resultat.varningar:
+        for rad in _radbryt(v, 64):
+            print(f"  {rad}" if v.startswith(rad) else f"    {rad}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="python -m aktieanalys",
@@ -1049,6 +1234,31 @@ def main(argv: list[str] | None = None) -> int:
                         help="startdatum (standard: backtest.start i config)")
     p_back.add_argument("--till", metavar="ÅÅÅÅ-MM-DD", help="slutdatum")
     p_back.set_defaults(func=_backtest)
+
+    p_hitta = under.add_parser(
+        "hitta-universum",
+        help="söker upp svenska bolag som klarar dina gränser, i stället "
+             "för att de ska skrivas in för hand",
+    )
+    p_hitta.add_argument("--yaml", action="store_true",
+                         help="skriv ut ett färdigt block för universum.yaml")
+    p_hitta.add_argument("--snabb", action="store_true",
+                         help="hoppa över sektorhämtningen (ingen "
+                              "kategoriindelning, men går på sekunder)")
+    p_hitta.set_defaults(func=_hitta_universum)
+
+    p_utv = under.add_parser(
+        "utvardera",
+        help="mäter om poängen har något samband med efterföljande "
+             "avkastning (fler datapunkter än backtestet)",
+    )
+    p_utv.add_argument("--fran", metavar="ÅÅÅÅ-MM-DD")
+    p_utv.add_argument("--till", metavar="ÅÅÅÅ-MM-DD")
+    p_utv.add_argument("--horisont", type=int, default=365, metavar="DAGAR",
+                       help="hur långt fram avkastningen mäts (standard 365)")
+    p_utv.add_argument("--steg", type=int, default=30, metavar="DAGAR",
+                       help="hur ofta mätningen görs (standard var 30:e dag)")
+    p_utv.set_defaults(func=_utvardera)
 
     args = p.parse_args(argv)
     logg.satt_upp()

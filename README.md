@@ -25,6 +25,7 @@ konfigurationen.
 | 7 | Veckorapport som HTML och mejl | **klart** |
 | 8 | Schemaläggning via GitHub Actions | **klart** |
 | 9 | Backtest mot OMXS30 | **klart** |
+| 10 | Automatisk bolagssökning och IC-utvärdering | **klart** |
 
 ---
 
@@ -250,6 +251,91 @@ Fyra regler, som alla ger tydliga felmeddelanden om du bryter dem:
 Du behöver bara fylla i de bolag du faktiskt vill kunna jämföra. Ett
 fastighetsbolag utan förvaltningsresultat utesluts ur sin kategori och
 listas i rapporten med orsak -- det får aldrig en gissad siffra.
+
+---
+
+## Hitta bolag automatiskt
+
+Den ursprungliga bolagslistan skrevs för hand ur minnet. Det betyder att
+ett bolag ingen tänkte på aldrig kunde väljas — och ABB, ett av börsens
+största bolag, saknades i tre veckor utan att någon märkte det.
+
+```bash
+python -m aktieanalys hitta-universum --yaml
+```
+
+Söker upp alla svenska bolag som klarar dina gränser via Yahoos
+screener, jämför med `universum.yaml` och föreslår de som saknas.
+
+Utfallet med nuvarande gränser: **224 bolag över 5 mdr kr, varav 176
+klarar även likviditetskravet.** Listan innehöll 70. Det finns alltså
+drygt hundra bolag som aldrig haft en chans att bli valda.
+
+Kommandot **ändrar ingenting**. Det skriver ut ett förslag att läsa
+igenom, för två saker kräver ditt omdöme:
+
+**Kategoriindelningen bygger på Yahoos sektorer**, som är för grova.
+"Financial Services" rymmer storbanker, försäkringsbolag,
+investmentbolag och kapitalförvaltare — som ska bedömas på helt olika
+mått. Investor hamnar där, och skulle få bankuppsättningen med ROE, P/B
+och kapitaltäckning. Sådana fall märks `KONTROLLERA`.
+
+**Aktieslag flaggas automatiskt.** Föreslås `ATCO-B.ST` när `ATCO-A.ST`
+redan finns märks det `[ANNAT AKTIESLAG]` — samma bolag i två aktieslag
+skulle konkurrera med sig självt och snedvrida percentilrankningen.
+
+---
+
+## Utvärdering: säger poängen något?
+
+```bash
+python -m aktieanalys utvardera
+```
+
+Backtestet mäter portföljen och domineras av slump. Det här mäter
+**rangordningen** i stället: för varje mättidpunkt poängsätts alla bolag
+med den data som fanns då, och poängen jämförs med hur det faktiskt gick
+de följande tolv månaderna.
+
+Måttet heter *information coefficient* och är Spearmans rangkorrelation.
+Grovt: omkring 0 betyder ingen information, 0,02–0,05 är svagt men
+användbart och vanligt för riktiga modeller, över 0,10 är ovanligt
+starkt — misstänk ett fel i uppställningen.
+
+### Vad mätningen gav
+
+```
+                                 överlappande    oberoende
+  antal perioder                           30            3
+  genomsnittlig IC                     0.1766       0.2691
+
+VAD GER REN SLUMP I SAMMA UPPSTÄLLNING?
+  5:e till 95:e percentilen    -0.2260 till 0.2452
+
+RÖR SIG RANGORDNINGEN MELLAN ÅREN?
+  Industri                 +0.92   nästan oförändrad
+  Konsument                +0.90   nästan oförändrad
+  Teknik                   +0.30   rörlig
+  Fastighet                +0.11   rörlig
+```
+
+Varje körning räknar **vad ren slump ger i exakt samma uppställning** —
+poängen kastas om och måttet räknas igen, hundratals gånger. Med tio
+bolag per kategori producerar rent brus IC mellan −0,23 och +0,25. Allt
+som ligger där inne är oläsbart.
+
+Den uppmätta nivån ligger **precis utanför** bruset. Det är en
+indikation, inte ett resultat — och mätningen säger själv varför:
+i Industri och Konsument är rangordningen nästan oförändrad mellan åren,
+så där mäts samma vad om och om igen. Det verkliga antalet oberoende
+observationer är närmare ett än tre.
+
+### Varför det ändå är bättre än backtestet
+
+Backtestet har sex observationer: en portfölj, en period. Det här har
+55 bolag per mättidpunkt. Det räcker inte för ett svar, men frågan är
+rätt ställd — och om några år, när din egen databas har byggt upp
+riktig point-in-time-historik, är det den här mätningen som ger svaret.
 
 ---
 
