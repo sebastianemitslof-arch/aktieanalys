@@ -268,8 +268,8 @@ rapport:
   mejl:
     # Fylls i i steg 7. Lösenordet ska ALDRIG stå i den här filen --
     # det läses ur miljövariabeln SMTP_LOSENORD.
-    till: ""
-    fran: ""
+    till: "sebastian.emitslof@gmail.com"
+    fran: "sebastian.emitslof@gmail.com"
     smtp_server: smtp.gmail.com
     smtp_port: 587
 
