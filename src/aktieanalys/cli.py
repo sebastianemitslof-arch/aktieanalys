@@ -359,6 +359,122 @@ def _rensa_harlett(args: argparse.Namespace) -> int:
     return 0
 
 
+def _enhet(mattnamn: str) -> str:
+    """Hur ett måttvärde bäst visas."""
+    if mattnamn in ("roic", "roe", "belaningsgrad", "kapitalstyrka",
+                    "momentum_12m_exkl_1m", "substansvarde_tillvaxt",
+                    "forvaltningsresultat_per_aktie_tillvaxt",
+                    "substansrabatt_mot_historik"):
+        return "procent"
+    return "tal"
+
+
+def _visa_varde(mattnamn: str, varde: float | None) -> str:
+    if varde is None:
+        return "     --"
+    if _enhet(mattnamn) == "procent":
+        return f"{varde * 100:6.1f}%"
+    return f"{varde:7.2f}"
+
+
+def _visa_poang(args: argparse.Namespace) -> int:
+    import datetime as dt
+
+    from aktieanalys.poang.modell import poangsatt
+    from aktieanalys.universum import las_och_valj
+
+    inst = las_installningar(args.config)
+    logg.satt_upp(inst.config.loggning.niva, inst.loggfil)
+    if not inst.databasvag.exists():
+        print("Databasen finns inte än. Kör först: python -m aktieanalys hamta-data")
+        return 1
+
+    datum = dt.date.fromisoformat(args.datum) if args.datum else None
+    urval, data = las_och_valj(inst, datum)
+    tavla = poangsatt(inst, urval, data, datum)
+
+    if args.bolag:
+        return _visa_ett_bolags_poang(args.bolag, tavla, inst)
+
+    print(f"Poäng per {tavla.datum}   ({tavla.sammanfattning()})")
+    print("Rangordningen sker inom varje kategori. 100 = bäst i kategorin, "
+          "0 = sämst.\n")
+
+    for namn, kp in tavla.kategorier.items():
+        rubrik = f"{namn}  ({len(kp.bolag)} bedömda)"
+        print(rubrik)
+        print("-" * len(rubrik))
+        if not kp.rangordningsbar:
+            print("  för få bedömbara bolag för en rangordning\n")
+            continue
+
+        print(f"  {'':3} {'bolag':14} {'poäng':>6}  "
+              f"{'kval':>5} {'värd':>5} {'styr':>5} {'mom':>5}   vikt satt")
+        for n, b in enumerate(kp.bolag, start=1):
+            p = b.pelare
+            def v(namn_: str) -> str:
+                x = p[namn_].poang
+                return f"{x:5.0f}" if x is not None else "   --"
+            markering = " *" if b.ar_innehav else "  "
+            print(f"  {n:2}.{markering}{b.ticker:14} {b.totalpoang:6.1f}  "
+                  f"{v('kvalitet')} {v('vardering')} {v('finansiell_styrka')} "
+                  f"{v('momentum')}   {b.andel_vikt:6.0%}")
+
+        for b in kp.obedombara:
+            print(f"   --  {b.ticker:14} obedömbart: {b.orsak}")
+        if kp.innehav and not any(b.ar_innehav for b in kp.bolag + kp.obedombara):
+            print(f"       innehavet {kp.innehav} finns inte i urvalet")
+        for v_ in kp.innehav_varningar:
+            print(f"       VARNING  {v_}")
+        print()
+
+    print("* = nuvarande innehav. "
+          "Kolumnen 'vikt satt' visar hur stor del av poängvikten som "
+          "vilade på mått med data.")
+    print("Kör med --bolag TICKER för hela uträkningen bakom ett bolags poäng.")
+    return 0
+
+
+def _visa_ett_bolags_poang(ticker: str, tavla, inst) -> int:
+    for kp in tavla.kategorier.values():
+        for b in kp.bolag + kp.obedombara:
+            if b.ticker != ticker:
+                continue
+            placering = kp.placering(ticker)
+            print(f"{ticker}  --  {b.namn or ''}")
+            print(f"kategori: {kp.namn}"
+                  + (f"   placering {placering} av {len(kp.bolag)}" if placering else ""))
+            if b.totalpoang is not None:
+                print(f"TOTALPOÄNG: {b.totalpoang:.1f}    "
+                      f"({b.andel_vikt:.0%} av vikten gick att sätta)")
+            else:
+                print(f"OBEDÖMBART: {b.orsak}")
+            if b.ar_innehav:
+                print("detta är ditt nuvarande innehav")
+
+            for pelarnamn, p in b.pelare.items():
+                poangtext = f"{p.poang:5.1f}" if p.finns else "   --"
+                print(f"\n  {pelarnamn.upper()}  vikt {p.vikt:.0%}   "
+                      f"poäng {poangtext}   ({p.andel_vikt:.0%} av måttvikten satt)")
+                print(f"    {'mått':40} {'värde':>8} {'rank':>6} {'vikt':>6}")
+                for m in p.matt:
+                    if m.orsak == "måttet används inte i kategorin":
+                        continue
+                    ranktext = f"{m.rank:6.1f}" if m.finns else "    --"
+                    vikttext = f"{m.anvand_vikt:5.0%}" if m.finns else "    0%"
+                    print(f"    {m.namn:40} {_visa_varde(m.namn, m.varde)} "
+                          f"{ranktext} {vikttext}")
+                    if m.orsak:
+                        print(f"      {m.orsak}")
+            print(f"\nRanken är relativ: 100 = bäst bland de {len(kp.bolag)} "
+                  f"bedömda bolagen i {kp.namn}, 0 = sämst.")
+            return 0
+
+    print(f"{ticker} finns inte i någon kategoris urval.\n"
+          f"Kör 'visa-urval' för att se om bolaget uteslutits, och varför.")
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="python -m aktieanalys",
@@ -424,6 +540,16 @@ def main(argv: list[str] | None = None) -> int:
                          help="rensa ett bestämt fält, t.ex. när en "
                               "härlednings formel ändrats")
     p_rensa.set_defaults(func=_rensa_harlett)
+
+    p_poang = under.add_parser(
+        "visa-poang",
+        help="rangordningen per kategori, och hela uträkningen bakom ett bolags poäng",
+    )
+    p_poang.add_argument("--bolag", metavar="TICKER",
+                         help="visa varje mått, värde, rank och vikt för ett bolag")
+    p_poang.add_argument("--datum", metavar="ÅÅÅÅ-MM-DD",
+                         help="poängsätt med den data som fanns ett visst datum")
+    p_poang.set_defaults(func=_visa_poang)
 
     args = p.parse_args(argv)
     logg.satt_upp()

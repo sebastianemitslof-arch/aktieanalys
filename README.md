@@ -19,7 +19,7 @@ konfigurationen.
 | 1 | Projektstruktur, konfiguration, validering | **klart** |
 | 2 | Datalager: yfinance, SQLite-cache, CSV-komplettering | **klart** |
 | 3 | Universum: filtrering och datatäckningskontroll | **klart** |
-| 4 | Poängmodellen | kommer |
+| 4 | Poängmodellen | **klart** |
 | 5 | Kvalitativt lager (Claude) | kommer |
 | 6 | Bytesregler och kostnadsberäkning | kommer |
 | 7 | Veckorapport som HTML och mejl | kommer |
@@ -250,6 +250,95 @@ Fyra regler, som alla ger tydliga felmeddelanden om du bryter dem:
 Du behöver bara fylla i de bolag du faktiskt vill kunna jämföra. Ett
 fastighetsbolag utan förvaltningsresultat utesluts ur sin kategori och
 listas i rapporten med orsak -- det får aldrig en gissad siffra.
+
+---
+
+## Poängmodellen
+
+```bash
+python -m aktieanalys visa-poang
+```
+
+Rangordningen per kategori, med poäng per pelare. Hela uträkningen
+bakom ett enskilt bolag:
+
+```bash
+python -m aktieanalys visa-poang --bolag ATCO-A.ST
+```
+
+### Så räknas poängen
+
+**Steg 1: rangordna.** Varje mått görs om till en percentilrank 0--100
+**inom kategorin**. Bäst får 100, sämst får 0. Ett fastighetsbolag
+jämförs aldrig med ett läkemedelsbolag, och den absoluta nivån spelar
+ingen roll -- bara ordningen mellan bolagen. Skalan är oberoende av hur
+många bolag som jämförs, så en kategori med sju bolag går att jämföra
+med en som har sexton.
+
+**Steg 2: väg samman.** Ranken vägs ihop inom varje pelare, och
+pelarna vägs ihop till en totalpoäng, med vikterna ur `config.yaml`.
+
+Ett verkligt exempel, Atlas Copco:
+
+```
+  KVALITET  vikt 30%   poäng  86.7
+    roic                            25.3%   rank 100.0   vikt 60%
+    rorelsemarginal_stabilitet_5ar   0.60   rank  66.7   vikt 40%
+
+  VARDERING  vikt 30%   poäng  25.7
+    ev_ebit                         27.58   rank  20.0   vikt 45%
+    pe                              33.91   rank  26.7   vikt 25%
+    ev_ebit_mot_egen_historik        1.29   rank  33.3   vikt 30%
+
+  FINANSIELL_STYRKA  vikt 15%   poäng  93.3
+    nettoskuld_ebitda                0.27   rank  93.3   vikt 100%
+
+  MOMENTUM  vikt 25%   poäng  73.3
+    momentum_12m_exkl_1m            29.6%   rank  73.3   vikt 100%
+```
+
+Totalpoäng = 86,7 × 0,30 + 25,7 × 0,30 + 93,3 × 0,15 + 73,3 × 0,25 =
+**66,0**. Allt går att räkna efter för hand, vilket är meningen.
+
+### Saknad data viktas om, blir aldrig noll
+
+Saknar ett bolag ett av tre värderingsmått räknas pelaren på de två som
+finns, med deras vikter uppräknade. En nolla hade betytt "sämst i
+klassen", vilket är ett helt annat påstående än "vi vet inte".
+
+Kolumnen **vikt satt** i tabellen visar hur stor del av poängvikten som
+vilade på mått med data. Står det 100 % hade bolaget allt.
+
+Omviktningen har en gräns: `min_andel_poangvikt` (standard 0,6). Går
+mindre än så att sätta får bolaget **ingen poäng alls** och listas som
+obedömbart med vad som fattas. Annars hade ett bolag kunnat ranka först
+i sin kategori på enbart momentum -- vilket ser ut som ett svar utan att
+vara det.
+
+### Spärrar som hindrar vilseledande tal
+
+Några nyckeltal blir meningslösa i vissa lägen, och ger då `None` i
+stället för ett tal:
+
+| Läge | Varför |
+|---|---|
+| EV/EBIT vid rörelseförlust | negativt tal ser billigt ut men betyder förlust |
+| P/E vid förlust | samma sak |
+| P/B vid negativt eget kapital | samma sak |
+| ROIC vid negativt kapital | ser fantastisk ut, betyder motsatsen |
+| Nettoskuld/EBITDA vid negativ EBITDA | odefinierat |
+| Momentum på under ett års historik | mätpunkterna finns inte |
+| Tillväxt från ett negativt startvärde | odefinierat |
+
+Historiska jämförelser använder **median**, inte medelvärde, så att ett
+enda extremår inte flyttar bolagets "normala" värdering. Förlustår
+hoppas över.
+
+### Ändra vikterna
+
+Allt ligger i `config.yaml` under `poang`. Vill du luta mer mot värde:
+höj `vardering`, sänk `momentum`. Vikterna måste summera till 1,0, och
+programmet säger till om de inte gör det.
 
 ---
 

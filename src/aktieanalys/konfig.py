@@ -96,6 +96,7 @@ class Poanginstallningar(_Bas):
     antal_ar_historik: int = Field(ge=2, le=20)
     min_ar_historik: int = Field(ge=2, le=20)
     min_bolag_for_rank: int = Field(ge=2)
+    min_andel_poangvikt: float = Field(default=0.6, gt=0, le=1)
     mattuppsattningar: dict[str, Mattuppsattning]
 
     @model_validator(mode="after")

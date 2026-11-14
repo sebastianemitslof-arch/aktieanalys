@@ -69,6 +69,17 @@ poang:
   # säger ingenting.
   min_bolag_for_rank: 4
 
+  # Hur stor del av poängvikten som måste gå att sätta för att ett bolag
+  # ska få en totalpoäng alls. 0.6 betyder att minst 60 procent av
+  # vikten måste vila på mått som faktiskt har data.
+  #
+  # Saknas mer än så räknas ingen poäng ut. Bolaget listas i stället i
+  # rapporten som obedömbart, med vad som fattas. Alternativet vore att
+  # vikta om till det lilla som finns, men då hade ett bolag kunnat
+  # ranka först i sin kategori på enbart momentum -- vilket ser ut som
+  # ett svar utan att vara det.
+  min_andel_poangvikt: 0.6
+
   # -------------------------------------------------------------------
   #  MÅTTUPPSÄTTNINGAR
   # -------------------------------------------------------------------
