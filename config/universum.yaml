@@ -81,6 +81,7 @@ kategorier:
       - ENGCON-B.ST     # engcon, 8 mdr
       - KAR.ST          # Karnov Group, 8 mdr
       - VISC.ST         # Gruvaktiebolaget Viscaria, 6 mdr
+      - ROKO-B.ST       # Röko, serieförvärvare, 30 mdr -- flyttad från Bank/finans: ingen bank
 
   Bank/finans:
     mattuppsattning: bank
@@ -96,7 +97,6 @@ kategorier:
       - NORION.ST      # Norion Bank
       # --- tillagda 2026-11-14 av hitta-universum ---
       - NOBA.ST         # NOBA Bank Group, 47 mdr
-      - ROKO-B.ST       # Röko, 30 mdr
       - HOFI.ST         # Hoist Finance, 18 mdr
       - AVARDA.ST       # Avarda Bank, 15 mdr
       - MORROW.ST       # Morrow Bank, 6 mdr
