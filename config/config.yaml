@@ -169,8 +169,14 @@ kvalitativt:
 
   # Stäng av med "aktiverat: false", eller kör med flaggan --utan-llm
   # för en enskild körning. Kräver en API-nyckel i miljövariabeln
-  # ANTHROPIC_API_KEY.
-  modell: claude-sonnet-5-5
+  # ANTHROPIC_API_KEY, eller i en .env-fil i projektmappen.
+  #
+  # claude-opus-5-5 är den mest kapabla modellen och kostar ungefär
+  # 15 kr i månaden för en veckokörning med ett tjugotal bolag.
+  # Vill du halvera det: byt till claude-sonnet-5-5. Vill du ha det
+  # nästan gratis: claude-haiku-5-5, men omdömet blir grövre och
+  # poängen är just omdöme.
+  modell: claude-opus-5-5
 
   # Hur mycket Claude högst får flytta ett bolags poäng, uppåt eller
   # nedåt. 0.10 = tio procent.

@@ -20,7 +20,7 @@ konfigurationen.
 | 2 | Datalager: yfinance, SQLite-cache, CSV-komplettering | **klart** |
 | 3 | Universum: filtrering och datatäckningskontroll | **klart** |
 | 4 | Poängmodellen | **klart** |
-| 5 | Kvalitativt lager (Claude) | kommer |
+| 5 | Kvalitativt lager (Claude) | **klart** |
 | 6 | Bytesregler och kostnadsberäkning | kommer |
 | 7 | Veckorapport som HTML och mejl | kommer |
 | 8 | Schemaläggning via GitHub Actions | kommer |
@@ -250,6 +250,99 @@ Fyra regler, som alla ger tydliga felmeddelanden om du bryter dem:
 Du behöver bara fylla i de bolag du faktiskt vill kunna jämföra. Ett
 fastighetsbolag utan förvaltningsresultat utesluts ur sin kategori och
 listas i rapporten med orsak -- det får aldrig en gissad siffra.
+
+---
+
+## Det kvalitativa lagret -- Claude läser nyheterna
+
+Sifferpoängen ser inte en vinstvarning som kom i förrgår. Det gör det
+här lagret: för topp 3 i varje kategori plus dina innehav skickas
+nyckeltalen och de senaste nyhetsrubrikerna till Claude, som flaggar
+risker och justerar poängen några procent.
+
+### Skaffa en API-nyckel
+
+Det här är ett annat konto än ditt Claude-abonnemang -- API:et betalas
+separat och per användning.
+
+1. Gå till **https://console.anthropic.com**
+2. Skapa konto eller logga in
+3. **Billing** -> fyll på med ett mindre belopp. Det räcker länge.
+4. **API keys** -> **Create key**. Ge den ett namn, t.ex. "aktieanalys"
+5. Kopiera nyckeln direkt -- den visas bara en gång
+
+### Lägg in nyckeln
+
+Skapa en fil som heter `.env` i projektmappen, med en enda rad:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Filen ligger redan i `.gitignore` och hamnar aldrig i repot. Programmet
+läser den automatiskt.
+
+Du kan också sätta nyckeln som miljövariabel om du hellre vill det --
+då används den i stället. I steg 8 lägger vi in samma nyckel som en
+"Secret" i GitHub, för den automatiska veckokörningen.
+
+**Nyckeln ska aldrig klistras in i en chatt, i config.yaml eller i
+någon fil som versionshanteras.**
+
+### Se vad som skickas, innan du betalar för det
+
+```bash
+python -m aktieanalys visa-kvalitativ --torrkor --bolag ATT.ST
+```
+
+Visar hela systemprompten och hela underlaget för ett bolag, utan att
+anropa API:et. Kostar ingenting.
+
+Kör skarpt:
+
+```bash
+python -m aktieanalys visa-kvalitativ
+```
+
+Eller hoppa över lagret helt för en körning:
+
+```bash
+python -m aktieanalys visa-kvalitativ --utan-llm
+```
+
+### Mandatet är smalt, och det upprätthålls i kod
+
+Claude får göra **två saker**: flagga risker, och justera poängen inom
+±`max_justering` (standard 10 %). Fyra spärrar:
+
+| Spärr | Hur |
+|---|---|
+| Kan inte föreslå bolag | Varje anrop gäller ETT bolag, och svarsschemat har inget fält för att nämna ett annat. Underlaget nämner inte ens de andra bolagens namn. |
+| Kan inte överskrida ±10 % | Justeringen klamras på vår sida. Ett försök att gå över antecknas och visas i rapporten. |
+| Kan inte svara fritt | Svaret valideras mot ett schema. Håller det inte formatet används den rena sifferpoängen. |
+| Kan inte stoppa rapporten | Saknad nyckel, nätfel eller strypning ger ingen justering och en notering -- veckorapporten går ut ändå. |
+
+Nyhetsrubriker behandlas som **data, inte instruktioner**. Både
+systemprompten och underlaget säger det uttryckligen, eftersom en rubrik
+i princip kan innehålla text som ser ut som en uppmaning.
+
+### Flaggan som påverkar bytesreglerna
+
+Svaret innehåller `fundamental_forsamring`. Sätts den -- vid vinstvarning,
+indragen prognos eller liknande -- åsidosätter bytesreglerna i steg 6
+kravet på minsta innehavstid. Det är den enda väg på vilken det
+kvalitativa lagret kan utlösa ett bytesförslag, och systemprompten säger
+åt modellen att använda den sparsamt.
+
+### Vad det kostar
+
+Ungefär 20 bolag i veckan, några tusen tokens vardera. Med
+`claude-opus-5-5` landar det på storleksordningen **15 kr i månaden**.
+Byt till `claude-sonnet-5-5` i `config.yaml` för ungefär halva priset,
+eller `claude-haiku-5-5` för nästan ingenting -- men omdömet blir grövre,
+och omdöme är hela poängen med lagret.
+
+Kommandot skriver ut hur många tokens som gick åt och vad det kostade.
 
 ---
 
@@ -622,8 +715,9 @@ tidpunkt.
 
 **Claude får bara justera, aldrig välja.** Språkmodellen ser bara de
 bolag poängmodellen redan rangordnat högt, och får flytta poängen högst
-±10 %. Den kan inte föreslå ett bolag utanför modellen. Svaret valideras
-som JSON; håller det inte formatet används den rena sifferpoängen.
+±10 %. Den kan inte föreslå ett bolag utanför modellen -- svarsschemat
+har inget fält för det. Svaret valideras; håller det inte formatet
+används den rena sifferpoängen.
 
 ---
 

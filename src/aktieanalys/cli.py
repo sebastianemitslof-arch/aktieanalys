@@ -475,6 +475,87 @@ def _visa_ett_bolags_poang(ticker: str, tavla, inst) -> int:
     return 1
 
 
+def _visa_kvalitativ(args: argparse.Namespace) -> int:
+    import datetime as dt
+
+    from aktieanalys.kvalitativ.klient import Kvalitativtlager
+    from aktieanalys.kvalitativ.schema import SVENSKA
+    from aktieanalys.poang.modell import poangsatt
+    from aktieanalys.universum import las_och_valj
+
+    inst = las_installningar(args.config)
+    logg.satt_upp(inst.config.loggning.niva, inst.loggfil)
+    if not inst.databasvag.exists():
+        print("Databasen finns inte än. Kör först: python -m aktieanalys hamta-data")
+        return 1
+
+    datum = dt.date.fromisoformat(args.datum) if args.datum else None
+    urval, data = las_och_valj(inst, datum)
+    tavla = poangsatt(inst, urval, data, datum)
+    lager = Kvalitativtlager(inst)
+
+    # Torrkörning: visa exakt vad som skulle skickas, utan att anropa API:et
+    if args.torrkor:
+        valda = lager._valj_bolag(tavla)
+        if args.bolag:
+            valda = [b for b in valda if b.ticker == args.bolag]
+            if not valda:
+                print(f"{args.bolag} ingår inte i urvalet som skickas till Claude.\n"
+                      f"Urvalet är topp {inst.config.kvalitativt.antal_utmanare} "
+                      f"per kategori plus dina innehav.")
+                return 1
+        print(f"TORRKÖRNING -- inget skickas, inget kostar.\n")
+        print(f"Urvalet omfattar {len(lager._valj_bolag(tavla))} bolag: "
+              f"topp {inst.config.kvalitativt.antal_utmanare} per kategori "
+              f"plus innehav.\n")
+        for bp in valda[: 1 if args.bolag else 1]:
+            bd = data.get(bp.ticker)
+            nyheter = lager._nyheter(bp.ticker)
+            print("=" * 70)
+            print("SYSTEMPROMPT (samma för alla bolag)")
+            print("=" * 70)
+            from aktieanalys.kvalitativ.klient import SYSTEMPROMPT
+            print(SYSTEMPROMPT.format(
+                grans=inst.config.kvalitativt.max_justering * 100))
+            print()
+            print("=" * 70)
+            print(f"UNDERLAG FÖR {bp.ticker}")
+            print("=" * 70)
+            print(lager._bygg_underlag(bp, bd, tavla, nyheter))
+        if not args.bolag and len(valda) > 1:
+            print(f"\n(visar det första av {len(valda)} bolag -- "
+                  f"använd --bolag TICKER för ett annat)")
+        return 0
+
+    resultat = lager.bedom_urval(tavla, data, utan_llm=args.utan_llm)
+    print(f"Kvalitativt lager: {resultat.sammanfattning()}\n")
+    if not resultat.aktiverat:
+        print(f"Avstängt: {resultat.orsak_avstangt}")
+        return 0
+
+    print(f"modell: {resultat.modell}")
+    kostnad = resultat.tokens_in / 1e6 * 4 + resultat.tokens_ut / 1e6 * 20
+    print(f"tokens: {resultat.tokens_in:,} in, {resultat.tokens_ut:,} ut "
+          f"(ca {kostnad * 11:.2f} kr)\n")
+
+    for ticker, b in sorted(resultat.bedomningar.items()):
+        if not b.anvand:
+            print(f"{ticker:14} ingen justering -- {b.orsak}")
+            continue
+        tecken = "+" if b.justering >= 0 else ""
+        rad = f"{ticker:14} {tecken}{b.justering:5.1f} %"
+        if b.fundamental_forsamring:
+            rad += "   FUNDAMENTAL FÖRSÄMRING"
+        if b.klamrad_fran is not None:
+            rad += f"   (modellen föreslog {b.klamrad_fran:.1f} %, kapat)"
+        print(rad)
+        print(f"               {b.motivering}")
+        for r in b.risker:
+            print(f"               - {r.som_text()}")
+        print()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="python -m aktieanalys",
@@ -550,6 +631,20 @@ def main(argv: list[str] | None = None) -> int:
     p_poang.add_argument("--datum", metavar="ÅÅÅÅ-MM-DD",
                          help="poängsätt med den data som fanns ett visst datum")
     p_poang.set_defaults(func=_visa_poang)
+
+    p_kval = under.add_parser(
+        "visa-kvalitativ",
+        help="Claudes riskflaggor och poängjusteringar för topp 3 plus innehav",
+    )
+    p_kval.add_argument("--torrkor", action="store_true",
+                        help="visa exakt vad som skulle skickas, utan att "
+                             "anropa API:et (kostar ingenting)")
+    p_kval.add_argument("--bolag", metavar="TICKER",
+                        help="med --torrkor: visa underlaget för ett bestämt bolag")
+    p_kval.add_argument("--utan-llm", action="store_true", dest="utan_llm",
+                        help="hoppa över det kvalitativa lagret helt")
+    p_kval.add_argument("--datum", metavar="ÅÅÅÅ-MM-DD")
+    p_kval.set_defaults(func=_visa_kvalitativ)
 
     args = p.parse_args(argv)
     logg.satt_upp()
