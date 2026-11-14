@@ -221,9 +221,29 @@ def test_tom_ticker_nekas(tmp_path):
 # =====================================================================
 #  De medföljande mallfilerna
 # =====================================================================
-def test_medfoljande_mallar_ar_giltiga():
+def test_medfoljande_filer_ar_giltiga():
+    """bankdata.csv innehåller verkliga CET1-tal. De två andra filerna är
+    tomma mallar och ska aldrig innehålla påhittade siffror."""
     from tests.conftest import ROT
 
     csv = CsvKomplettering(ROT / "data" / "manuellt", idag=IDAG)
     assert len(csv.filer) == 3
-    assert csv.tickers() == []  # mallarna är tomma, inga påhittade tal
+
+    ifyllda = {falt for per_falt in csv.varden.values() for falt in per_falt}
+    assert ifyllda <= {"cet1_kvot"}, (
+        f"bara kapitaltäckning ska vara ifylld, hittade {sorted(ifyllda)}"
+    )
+
+
+def test_medfoljande_cet1_tal_ar_andelar_inte_procent():
+    """Skrivs 18,2 % som 18.2 i stället för 0.182 blir kapitaltäckningen
+    1 820 000 procent och banken rankas alltid först."""
+    from tests.conftest import ROT
+
+    csv = CsvKomplettering(ROT / "data" / "manuellt", idag=IDAG)
+    for ticker, per_falt in csv.varden.items():
+        for ar, varde in per_falt.get("cet1_kvot", {}).items():
+            assert 0.05 < varde < 0.5, (
+                f"{ticker} {ar}: {varde} ser inte ut som en andel -- "
+                f"18,2 procent skrivs 0.182"
+            )
