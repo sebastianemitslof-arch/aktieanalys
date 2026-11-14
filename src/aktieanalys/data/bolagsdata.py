@@ -16,6 +16,22 @@ import datetime as dt
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+FALTVERSION = 3
+"""Versionsnummer på fältkatalogen. HÖJ DET när fält läggs till.
+
+Cachen avgör annars "färsk" enbart på datum, och data som hämtades
+innan ett fält fanns ser lika färsk ut som data hämtad i dag. Det hände:
+fem fastighetsbolag lästes ur cachen utan de balansposter härledningarna
+behöver, och uteslöts för saknade mått trots att siffrorna fanns hos
+Yahoo.
+
+Historik:
+  1  ursprunglig uppsättning
+  2  rapportvaluta, totala tillgångar, räntekostnad, årsserier för
+     balansposter
+  3  volymhistorik
+"""
+
 Falttyp = Literal["tal", "arslista", "kursserie"]
 """tal       = ett enda tal, t.ex. kurs eller nettoskuld
 arslista  = ett värde per räkenskapsår, t.ex. [(2025, 1234.0), (2024, 1100.0)]

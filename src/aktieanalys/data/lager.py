@@ -31,7 +31,7 @@ from typing import Any
 
 import pandas as pd
 
-from aktieanalys.data.bolagsdata import FALT, Bolagsdata
+from aktieanalys.data.bolagsdata import FALT, FALTVERSION, Bolagsdata
 from aktieanalys.logg import hamta
 
 logg = hamta(__name__)
@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS bolagsmeta (
     namn          TEXT,
     valuta        TEXT,
     rapportvaluta TEXT,
+    faltversion   INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY (ticker, datum)
 );
 
@@ -136,7 +137,28 @@ class Lager:
         self.db = sqlite3.connect(self.vag)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        self._migrera()
         self.db.commit()
+
+    #: Kolumner som lagts till efter att en databas först skapades.
+    #: CREATE TABLE IF NOT EXISTS rör inte en tabell som redan finns, så
+    #: en gammal databas måste få dem tillagda.
+    MIGRERINGAR = (
+        ("bolagsmeta", "faltversion", "INTEGER NOT NULL DEFAULT 1"),
+    )
+
+    def _migrera(self) -> None:
+        for tabell, kolumn, typ in self.MIGRERINGAR:
+            finns = {
+                r["name"] for r in self.db.execute(f"PRAGMA table_info({tabell})")
+            }
+            if not finns:
+                continue  # tabellen skapas nyss av SCHEMA
+            if kolumn not in finns:
+                logg.info("lägger till kolumnen %s.%s", tabell, kolumn)
+                self.db.execute(
+                    f"ALTER TABLE {tabell} ADD COLUMN {kolumn} {typ}"
+                )
 
     def __enter__(self) -> Lager:
         return self
@@ -182,8 +204,10 @@ class Lager:
 
             self.db.execute(
                 "INSERT OR REPLACE INTO bolagsmeta "
-                "(ticker, datum, namn, valuta, rapportvaluta) VALUES (?,?,?,?,?)",
-                (bd.ticker, datum, bd.namn, bd.valuta, bd.rapportvaluta),
+                "(ticker, datum, namn, valuta, rapportvaluta, faltversion) "
+                "VALUES (?,?,?,?,?,?)",
+                (bd.ticker, datum, bd.namn, bd.valuta, bd.rapportvaluta,
+                 FALTVERSION),
             )
             self.db.execute(
                 "DELETE FROM saknat WHERE ticker=? AND datum=?", (bd.ticker, datum)
@@ -393,11 +417,33 @@ class Lager:
             return None
         return ((idag or dt.date.today()) - dt.date.fromisoformat(rad["d"])).days
 
+    def faltversion(self, ticker: str) -> int:
+        """Vilken version av fältkatalogen bolagets data hämtades under."""
+        rad = self.db.execute(
+            "SELECT MAX(faltversion) AS v FROM bolagsmeta WHERE ticker=?",
+            (ticker,),
+        ).fetchone()
+        return int(rad["v"]) if rad and rad["v"] is not None else 0
+
     def ar_farsk(
         self, ticker: str, max_alder_dagar: int, idag: dt.date | None = None
     ) -> bool:
+        """Färsk betyder både nyligen hämtad OCH hämtad med nuvarande
+        fältuppsättning.
+
+        Utan versionskontrollen ser data som hämtades innan ett fält
+        fanns lika färsk ut som data hämtad i dag, och fälten fylls
+        aldrig i."""
         alder = self.alder_i_dagar(ticker, idag)
-        return alder is not None and alder <= max_alder_dagar
+        if alder is None or alder > max_alder_dagar:
+            return False
+        if self.faltversion(ticker) < FALTVERSION:
+            logg.debug(
+                "%s: data hämtad med äldre fältuppsättning (%d < %d), "
+                "hämtas om", ticker, self.faltversion(ticker), FALTVERSION,
+            )
+            return False
+        return True
 
     # =================================================================
     #  Översikt

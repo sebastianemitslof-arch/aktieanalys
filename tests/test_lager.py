@@ -375,3 +375,92 @@ def test_den_verkliga_databasen_gar_att_dumpa_och_aterskapa(tmp_path):
     for nyckel in ["bolag", "varden", "kursrader", "saknade_varden",
                    "hamtningar", "forsta_datum", "senaste_datum"]:
         assert fore[nyckel] == efter[nyckel], nyckel
+
+
+# =====================================================================
+#  Fältversionen: "färsk" måste betyda "komplett" också
+# =====================================================================
+def test_farsk_data_med_gammal_faltuppsattning_hamtas_om(lager):
+    """Fem fastighetsbolag lästes ur cachen utan de balansposter
+    härledningarna behöver, och uteslöts för saknade mått trots att
+    siffrorna fanns hos Yahoo. Datumet var färskt; fälten var det inte."""
+    from aktieanalys.data.bolagsdata import FALTVERSION
+
+    lager.spara(bolag(dt.date(2026, 11, 13), 100.0))
+    assert lager.faltversion("TEST.ST") == FALTVERSION
+    assert lager.ar_farsk("TEST.ST", 5, dt.date(2026, 11, 13))
+
+    # Simulera data hämtad under en äldre fältuppsättning
+    lager.db.execute(
+        "UPDATE bolagsmeta SET faltversion = ? WHERE ticker = ?",
+        (FALTVERSION - 1, "TEST.ST"),
+    )
+    lager.db.commit()
+    assert not lager.ar_farsk("TEST.ST", 5, dt.date(2026, 11, 13)), (
+        "data hämtad med äldre fältuppsättning ska räknas som inaktuell"
+    )
+
+
+def test_okant_bolag_har_version_noll(lager):
+    assert lager.faltversion("FINNS-INTE.ST") == 0
+
+
+def test_gammal_databas_far_kolumnen_tillagd(tmp_path):
+    """CREATE TABLE IF NOT EXISTS rör inte en tabell som redan finns."""
+    import sqlite3
+
+    vag = tmp_path / "gammal.sqlite"
+    db = sqlite3.connect(vag)
+    db.execute(
+        "CREATE TABLE bolagsmeta (ticker TEXT NOT NULL, datum TEXT NOT NULL, "
+        "namn TEXT, valuta TEXT, rapportvaluta TEXT, "
+        "PRIMARY KEY (ticker, datum))"
+    )
+    db.execute(
+        "INSERT INTO bolagsmeta VALUES ('GAMMAL.ST','2026-01-01','Gammal','SEK','SEK')"
+    )
+    db.commit()
+    db.close()
+
+    with Lager(vag) as l:
+        kolumner = {
+            r["name"] for r in l.db.execute("PRAGMA table_info(bolagsmeta)")
+        }
+        assert "faltversion" in kolumner
+        # Befintliga rader får version 1, alltså äldre än nuvarande
+        assert l.faltversion("GAMMAL.ST") == 1
+        assert not l.ar_farsk("GAMMAL.ST", 99999, dt.date(2026, 1, 2))
+
+
+def test_migreringen_tappar_inte_data(tmp_path):
+    import sqlite3
+
+    vag = tmp_path / "gammal.sqlite"
+    db = sqlite3.connect(vag)
+    db.execute(
+        "CREATE TABLE bolagsmeta (ticker TEXT NOT NULL, datum TEXT NOT NULL, "
+        "namn TEXT, valuta TEXT, rapportvaluta TEXT, "
+        "PRIMARY KEY (ticker, datum))"
+    )
+    db.execute(
+        "INSERT INTO bolagsmeta VALUES ('AZN.ST','2026-01-01','AstraZeneca','SEK','USD')"
+    )
+    db.commit()
+    db.close()
+
+    with Lager(vag) as l:
+        meta = l.senast_kanda_meta("AZN.ST", dt.date(2026, 6, 1))
+        assert meta["rapportvaluta"] == "USD", "valutaminnet ska överleva"
+        assert meta["namn"] == "AstraZeneca"
+
+
+def test_migreringen_gar_att_kora_flera_ganger(tmp_path):
+    vag = tmp_path / "m.sqlite"
+    for _ in range(3):
+        with Lager(vag) as l:
+            l._migrera()
+    with Lager(vag) as l:
+        kolumner = [
+            r["name"] for r in l.db.execute("PRAGMA table_info(bolagsmeta)")
+        ]
+        assert kolumner.count("faltversion") == 1
