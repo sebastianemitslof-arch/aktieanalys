@@ -44,6 +44,43 @@ kategorier:
       - BEIJ-B.ST      # Beijer Ref
       - SECU-B.ST      # Securitas
       - SKA-B.ST       # Skanska
+      # --- tillagda 2026-11-14 av hitta-universum ---
+      - ABB.ST          # ABB Ltd, 1525 mdr
+      - 8TRA.ST         # Traton SE, 190 mdr
+      - LUMI.ST         # Lundin Mining Corporation, 174 mdr
+      - LUG.ST          # Lundin Gold Inc., 159 mdr
+      - BOL.ST          # Boliden, 142 mdr
+      - SSAB-A.ST       # SSAB, 92 mdr
+      - SCA-B.ST        # Svenska Cellulosa Aktiebolaget, 85 mdr
+      - MYCR.ST         # Mycronic, 57 mdr
+      - SWEC-B.ST       # Sweco, 51 mdr
+      - LAGR-B.ST       # Lagercrantz Group, 49 mdr
+      - HOLM-B.ST       # Holmen, 45 mdr
+      - LOOMIS.ST       # Loomis, 35 mdr
+      - BRAV.ST         # Bravida Holding, 31 mdr
+      - IPCO.ST         # International Petroleum Corpor, 30 mdr
+      - PEAB-B.ST       # Peab, 28 mdr
+      - BUFAB.ST        # Bufab, 26 mdr
+      - MTRS.ST         # Munters Group, 25 mdr
+      - ALLEI.ST        # Alleima, 24 mdr
+      - OEM-B.ST        # OEM International, 23 mdr
+      - BILL.ST         # Billerud, 22 mdr
+      - AQ.ST           # AQ Group, 20 mdr
+      - STOR-B.ST       # Storskogen Group, 20 mdr
+      - NCC-B.ST        # NCC, 19 mdr
+      - BEIA-B.ST       # Beijer Alma, 19 mdr
+      - SYSR.ST         # Systemair, 19 mdr
+      - GRNG.ST         # Gränges, 18 mdr
+      - EPRO-B.ST       # Electrolux Professional, 16 mdr
+      - AFRY.ST         # AFRY, 15 mdr
+      - INSTAL.ST       # Instalco, 12 mdr
+      - INWI.ST         # Inwido, 12 mdr
+      - MILDEF.ST       # MilDef Group, 11 mdr
+      - LIAB.ST         # Lindab International, 10 mdr
+      - SDIP-B.ST       # Sdiptech, 10 mdr
+      - ENGCON-B.ST     # engcon, 8 mdr
+      - KAR.ST          # Karnov Group, 8 mdr
+      - VISC.ST         # Gruvaktiebolaget Viscaria, 6 mdr
 
   Bank/finans:
     mattuppsattning: bank
@@ -57,6 +94,12 @@ kategorier:
       # - RESURS.ST    # Resurs Holding -- avstängt 2026-11-13: Yahoo svarar
       #                 inte på någon stavning. Bolaget är utköpt från börsen.
       - NORION.ST      # Norion Bank
+      # --- tillagda 2026-11-14 av hitta-universum ---
+      - NOBA.ST         # NOBA Bank Group, 47 mdr
+      - ROKO-B.ST       # Röko, 30 mdr
+      - HOFI.ST         # Hoist Finance, 18 mdr
+      - AVARDA.ST       # Avarda Bank, 15 mdr
+      - MORROW.ST       # Morrow Bank, 6 mdr
 
   # ------------------------------------------------------------------
   # INVESTMENTBOLAG -- avstängd kategori (2026-11-13)
@@ -106,6 +149,20 @@ kategorier:
       - AMBEA.ST       # Ambea
       - ATT.ST         # Attendo
       - XVIVO.ST       # Xvivo Perfusion
+      # --- tillagda 2026-11-14 av hitta-universum ---
+      - SECT-B.ST       # Sectra, 62 mdr
+      - CAMX.ST         # Camurus, 44 mdr
+      - ASKER.ST        # Asker Healthcare Group, 28 mdr
+      - BIOA-B.ST       # BioArctic, 28 mdr
+      - VIMIAN.ST       # Vimian Group, 22 mdr
+      - BONEX.ST        # Bonesupport Holding, 21 mdr
+      - NOLA-B.ST       # Nolato, 14 mdr
+      - APOTEA.ST       # Apotea, 10 mdr
+      - SYNSAM.ST       # Synsam, 9 mdr
+      - MCAP.ST         # MedCap, 8 mdr
+      - DYVOX.ST        # Dynavox Group, 8 mdr
+      - RAY-B.ST        # RaySearch Laboratories, 6 mdr
+      - EGTX.ST         # Egetis Therapeutics, 5 mdr
 
   Konsument:
     mattuppsattning: standard
@@ -125,6 +182,20 @@ kategorier:
       - BETS-B.ST      # Betsson
       - AAK.ST         # AAK
       - BOOZT.ST       # Boozt
+      # --- tillagda 2026-11-14 av hitta-universum ---
+      - STE-R.ST        # Stora Enso Oyj, 87 mdr
+      - ALIV-SDB.ST     # Autoliv, Inc., 87 mdr
+      - ASMDEE-B.ST     # Asmodee Group, 41 mdr
+      - VOLCAR-B.ST     # Volvo Car (publ.), 34 mdr
+      - CLA-B.ST        # Cloetta, 18 mdr
+      - SKIS-B.ST       # SkiStar, 16 mdr
+      - NEWA-B.ST       # New Wave Group, 14 mdr
+      - SCST.ST         # Scandi Standard, 14 mdr
+      - BILI-A.ST       # Bilia, 14 mdr
+      - RUSTA.ST        # Rusta, 12 mdr
+      - ACAD.ST         # AcadeMedia, 12 mdr
+      - JM.ST           # JM, 8 mdr
+      - RVRC.ST         # RVRC Holding, 6 mdr
 
   # Telia och Tele2 är strikt sett telekom, men med sju kategorier hör
   # de hemma här. Flytta dem om du hellre vill ha dem för sig.
@@ -144,6 +215,21 @@ kategorier:
       - KNOW.ST        # Knowit
       - TRUE-B.ST      # Truecaller
       - ENEA.ST        # Enea
+      # --- tillagda 2026-11-14 av hitta-universum ---
+      - NOKIA-SEK.ST    # Nokia Oyj, 458 mdr
+      - HMS.ST          # HMS Networks, 24 mdr
+      - HACK.ST         # Hacksaw, 17 mdr
+      - YUBICO.ST       # Yubico, 15 mdr
+      - SILEX.ST        # Silex Microsystems, 15 mdr
+      - NCAB.ST         # NCAB Group, 14 mdr
+      - MTG-B.ST        # Modern Times Group MTG, 12 mdr
+      - HANZA.ST        # Hanza, 10 mdr
+      - STORY-B.ST      # Storytel, 10 mdr
+      - HTRO.ST         # Hexatronic Group, 8 mdr
+      - ANOD-B.ST       # Addnode Group, 8 mdr
+      - BAHN-B.ST       # Bahnhof, 7 mdr
+      - HEM.ST          # Hemnet Group, 6 mdr
+      - ACAST.ST        # Acast, 6 mdr
 
   # Bantad till 7 bolag 2026-11-13: varje bolag kräver förvaltningsresultat,
   # belåningsgrad och räntetäckningsgrad i data/manuellt/fastighetsdata.csv,
@@ -171,3 +257,16 @@ kategorier:
       # - PNDX-B.ST      # Pandox -- avstängt: kräver manuell data
       # - CORE-B.ST      # Corem Property -- avstängt: kräver manuell data
       # - SBB-B.ST       # Samhallsbyggnadsbolaget -- avstängt: kräver manuell data
+      # --- tillagda 2026-11-14 av hitta-universum ---
+      - PNDX-B.ST       # Pandox, 34 mdr
+      - CATE.ST         # Catena, 26 mdr
+      - INTEA-B.ST      # Intea Fastigheter, 19 mdr
+      - PUBLI.ST        # PPI Public Property Invest, 17 mdr
+      - ALTRA.ST        # Altra Fastigheter, 15 mdr
+      - NP3.ST          # NP3 Fastigheter, 14 mdr
+      - ATRLJ-B.ST      # Atrium Ljungberg, 14 mdr
+      - CIBUS.ST        # Cibus Real Estate, 11 mdr
+      - SLP-B.ST        # Swedish Logistic Property, 10 mdr
+      - SVEAF-B.ST      # Sveafastigheter, 9 mdr
+      - DIOS.ST         # Diös Fastigheter, 8 mdr
+      - LOGI-B.ST       # Logistea, 8 mdr
