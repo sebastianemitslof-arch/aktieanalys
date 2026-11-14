@@ -162,7 +162,11 @@ class Lager:
             for falt, varde in bd.varden.items():
                 definition = FALT[falt]
                 if definition.typ == "kursserie":
-                    self.spara_kurser(bd.ticker, varde, commit=False)
+                    if falt == "kurshistorik":
+                        self.spara_kurser(
+                            bd.ticker, varde, commit=False,
+                            volymer=bd.varde("volymhistorik"),
+                        )
                     continue
                 tal, text = None, None
                 if definition.typ == "arslista":
@@ -192,13 +196,22 @@ class Lager:
                 )
 
     def spara_kurser(
-        self, ticker: str, serie: pd.Series, commit: bool = True
+        self,
+        ticker: str,
+        serie: pd.Series,
+        commit: bool = True,
+        volymer: pd.Series | None = None,
     ) -> int:
-        """Sparar kurshistorik. Serien ska ha datum som index."""
+        """Sparar kurshistorik, och volym när den finns."""
         if serie is None or len(serie) == 0:
             return 0
+        per_dag = {} if volymer is None else {
+            pd.Timestamp(d).date().isoformat(): float(v)
+            for d, v in volymer.items() if pd.notna(v)
+        }
         rader = [
-            (ticker, pd.Timestamp(d).date().isoformat(), float(v), None)
+            (ticker, pd.Timestamp(d).date().isoformat(), float(v),
+             per_dag.get(pd.Timestamp(d).date().isoformat()))
             for d, v in serie.items()
             if pd.notna(v)
         ]
@@ -297,6 +310,9 @@ class Lager:
 
         if kurser is not None and not kurser.empty:
             bd.satt("kurshistorik", kurser, "databas")
+            volymer = self.las_volymer(ticker, per_datum)
+            if not volymer.empty:
+                bd.satt("volymhistorik", volymer, "databas")
 
         for r in self.db.execute(
             "SELECT falt, orsak FROM saknat WHERE ticker=? AND datum=?",
@@ -341,21 +357,28 @@ class Lager:
         self, ticker: str, till_datum: dt.date | None = None
     ) -> pd.Series:
         """Kurshistoriken, eventuellt avskuren vid ett datum."""
-        if till_datum is None:
-            rader = self.db.execute(
-                "SELECT datum, stangning FROM kurser WHERE ticker=? ORDER BY datum",
-                (ticker,),
-            ).fetchall()
-        else:
-            rader = self.db.execute(
-                "SELECT datum, stangning FROM kurser WHERE ticker=? AND datum<=? "
-                "ORDER BY datum",
-                (ticker, till_datum.isoformat()),
-            ).fetchall()
+        return self._kurskolumn(ticker, "stangning", till_datum)
+
+    def las_volymer(
+        self, ticker: str, till_datum: dt.date | None = None
+    ) -> pd.Series:
+        """Handelsvolym per dag. Tom serie för äldre data som saknar volym."""
+        return self._kurskolumn(ticker, "volym", till_datum)
+
+    def _kurskolumn(
+        self, ticker: str, kolumn: str, till_datum: dt.date | None
+    ) -> pd.Series:
+        villkor = "" if till_datum is None else " AND datum<=?"
+        param = [ticker] + ([] if till_datum is None else [till_datum.isoformat()])
+        rader = self.db.execute(
+            f"SELECT datum, {kolumn} FROM kurser WHERE ticker=?{villkor} "
+            f"AND {kolumn} IS NOT NULL ORDER BY datum",
+            param,
+        ).fetchall()
         if not rader:
             return pd.Series(dtype=float)
         return pd.Series(
-            [r["stangning"] for r in rader],
+            [r[kolumn] for r in rader],
             index=pd.to_datetime([r["datum"] for r in rader]),
             name=ticker,
             dtype=float,

@@ -24,7 +24,7 @@ konfigurationen.
 | 6 | Bytesregler och kostnadsberäkning | **klart** |
 | 7 | Veckorapport som HTML och mejl | **klart** |
 | 8 | Schemaläggning via GitHub Actions | **klart** |
-| 9 | Backtest mot OMXS30 | kommer |
+| 9 | Backtest mot OMXS30 | **klart** |
 
 ---
 
@@ -250,6 +250,89 @@ Fyra regler, som alla ger tydliga felmeddelanden om du bryter dem:
 Du behöver bara fylla i de bolag du faktiskt vill kunna jämföra. Ett
 fastighetsbolag utan förvaltningsresultat utesluts ur sin kategori och
 listas i rapporten med orsak -- det får aldrig en gissad siffra.
+
+---
+
+## Backtest
+
+```bash
+python -m aktieanalys backtest
+```
+
+Kör reglerna vecka för vecka genom historien, med bara den data som
+fanns vid varje tidpunkt.
+
+### Läs det här innan du tolkar resultatet
+
+Backtestet är en **rimlighetskontroll av reglerna, inte ett bevis** för
+att de fungerar. Tre skäl, och de är inte små:
+
+**1. Fundamenta saknar publiceringsdatum.** yfinance säger vilket
+räkenskapsår en siffra gäller, men inte när den offentliggjordes.
+Backtestet antar därför en rapportfördröjning på tre månader: 2023 års
+bokslut blir "känt" från 1 april 2024. Svenska bolag rapporterar i
+praktiken i februari, så antagandet är försiktigt — vilket är rätt håll
+att fela åt, men det är fortfarande ett antagande.
+
+**2. Bara fyra räkenskapsår finns.** Med kvartalsvisa beslutsfönster och
+tolv månaders minsta innehavstid blir det en handfull beslut per
+kategori. Det är för få för att säga något statistiskt. En enda lyckad
+eller misslyckad aktie avgör hela siffran.
+
+**3. Det kvalitativa lagret kan inte rekonstrueras.** Historiska nyheter
+går inte att hämta med datum, så backtestet körs helt utan Claude.
+Riskflaggor och undantaget vid fundamental försämring saknas därför.
+
+### Vad som däremot är rent
+
+Allt annat rekonstrueras från årsserier, inte från dagens siffror:
+
+| | Hämtas från |
+|---|---|
+| Kurs och kurshistorik | äkta historisk, kapad vid datumet |
+| Nettoskuld, EBITDA, eget kapital, balansposter | senast **kända** bokslut |
+| Antal aktier | samma år som bokslutet, så nyemissioner räknas rätt |
+| Börsvärde, bolagsvärde | kurs då × aktier då |
+| Likviditet | kurs × volym, 60 dagar före datumet |
+
+Att använda dagens nettoskuld på 2023 års poäng vore precis den
+look-ahead som gör backtester värdelösa. Ett test konstruerar ett bolag
+vars nuvarande siffror är drastiskt bättre än de historiska och kräver
+att rekonstruktionen använder de historiska.
+
+**Bankernas kapitaltäckning utelämnas medvetet.** Den är inskriven för
+innevarande år och saknar historik. Att använda dagens siffra vore
+look-ahead, så bankerna bedöms i backtestet på 85 procent av
+poängvikten, utan pelaren finansiell styrka.
+
+### Jämförelseindex
+
+Portföljen räknas på **utdelningsjusterade** kurser. Då är bara index
+som också innehåller utdelningar rättvisa att jämföra med:
+
+| Index | Innehåller utdelningar | Rättvis jämförelse |
+|---|---|---|
+| `XACT-OMXS30.ST` | ja (börshandlad fond) | **ja** |
+| `^OMX` | nej, prisindex | nej, ligger systematiskt lågt |
+| `^OMXSPI` | nej, prisindex | nej, ligger systematiskt lågt |
+
+Prisindexen är med som referens, inte som måttstock. Skillnaden är
+ungefär 3–4 procentenheter per år — över fyra år är det enormt, och
+att jämföra mot dem hade fått vilken strategi som helst att se bra ut.
+
+### Så ändrar du
+
+I `config.yaml` under `backtest`: `start`, `startkapital_kr`,
+`rapportfordrojning_manader` och `jamforelseindex`. Eller på
+kommandoraden:
+
+```bash
+python -m aktieanalys backtest --fran 2024-01-01 --till 2025-12-31
+```
+
+Prova gärna att ändra `rapportfordrojning_manader` till 1 och 6 och se
+hur mycket resultatet rör sig. Rör det sig mycket säger det dig hur
+känsligt backtestet är för ett antagande vi inte kan kontrollera.
 
 ---
 

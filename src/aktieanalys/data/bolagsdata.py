@@ -52,6 +52,10 @@ FALT: dict[str, Faltdef] = {
         _f("kurshistorik", "kursserie", "marknad", "kr",
            "Daglig stängningskurs, justerad för utdelning och split. "
            "Används för momentum och för historiska värderingsjämförelser."),
+        _f("volymhistorik", "kursserie", "marknad", "st",
+           "Daglig handelsvolym i antal aktier. Behövs för att backtestet "
+           "ska kunna räkna likviditet vid varje tidpunkt i stället för "
+           "att använda dagens omsättning på gamla år."),
         _f("saljkurs", "tal", "marknad", "kr", "Högsta köpvilja (bid). För spreadberäkning."),
         _f("kopkurs", "tal", "marknad", "kr", "Lägsta säljvilja (ask). För spreadberäkning."),
 
@@ -75,6 +79,10 @@ FALT: dict[str, Faltdef] = {
            "och avdrag i det härledda förvaltningsresultatet."),
         _f("rantekostnad_historik", "arslista", "resultat", "kr",
            "Räntekostnad per år, som positiva tal."),
+        _f("ebitda_historik", "arslista", "resultat", "kr",
+           "Rörelseresultat före avskrivningar per år. Behövs för att "
+           "backtestet ska kunna räkna nettoskuld/EBITDA med den data som "
+           "fanns vid varje tidpunkt."),
 
         # ---------------- Balansräkning ----------------
         _f("eget_kapital", "tal", "balans", "kr", "Eget kapital hänförligt till aktieägarna."),
@@ -95,6 +103,15 @@ FALT: dict[str, Faltdef] = {
            "i belåningsgraden."),
         _f("eget_kapital_historik", "arslista", "balans", "kr",
            "Eget kapital per år. Grund för härledd substansvärdeshistorik."),
+        _f("nettoskuld_historik", "arslista", "balans", "kr",
+           "Nettoskuld per år. Utan den skulle backtestet tvingas använda "
+           "dagens skuldsättning för gamla år, vilket är look-ahead."),
+        _f("investerat_kapital_historik", "arslista", "balans", "kr",
+           "Investerat kapital per år. Nämnare i historisk ROIC."),
+        _f("totala_tillgangar_historik", "arslista", "balans", "kr",
+           "Balansomslutning per år."),
+        _f("rantebarande_skulder_historik", "arslista", "balans", "kr",
+           "Räntebärande bruttoskuld per år."),
         _f("antal_aktier_historik", "arslista", "balans", "st",
            "Antal aktier per år. Behövs för att räkna historiska tal PER "
            "AKTIE korrekt -- bolag som nyemitterat skulle annars få sin "

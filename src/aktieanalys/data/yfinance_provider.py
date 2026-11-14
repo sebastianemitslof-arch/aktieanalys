@@ -311,6 +311,9 @@ class YfinanceProvider(Provider):
         # Omsättning i kronor per dag, inte antal aktier. Yahoos
         # averageVolume är styckantal och duger inte som likviditetsmått.
         if "Volume" in historik:
+            volymer = naiva_datum(historik["Volume"].dropna())
+            if len(volymer):
+                bd.satt("volymhistorik", volymer, "yfinance:history")
             sista = historik.tail(self.handelsdagar)
             belopp = (sista["Close"] * sista["Volume"]).dropna()
             if len(belopp) >= 10:
@@ -342,7 +345,7 @@ class YfinanceProvider(Provider):
                 "omsattning", "rorelseresultat", "nettoresultat",
                 "omsattning_historik", "rorelseresultat_historik",
                 "nettoresultat_historik", "vinst_per_aktie_historik",
-                "rantekostnad", "rantekostnad_historik",
+                "rantekostnad", "rantekostnad_historik", "ebitda_historik",
             ):
                 bd.markera_saknat(falt, "Yahoo gav ingen resultaträkning")
             vaxling.satt("ebitda", _tal(info, "ebitda"), "yfinance:info")
@@ -362,6 +365,7 @@ class YfinanceProvider(Provider):
             # Räntekostnaden behövs för fastighetsbolagens räntetäckningsgrad
             # och för det härledda förvaltningsresultatet.
             "rantekostnad_historik": ("Interest Expense", "Interest Expense Non Operating"),
+            "ebitda_historik": ("EBITDA", "Normalized EBITDA"),
         }
         for falt, kandidater in par.items():
             serie = _arsserie(resultat, *kandidater)
@@ -468,6 +472,23 @@ class YfinanceProvider(Provider):
                          "Total Equity Gross Minority Interest") else None,
             f"{kalla} (eget kapital per år)",
         )
+        # Årsserier som backtestet behöver för att slippa använda dagens
+        # siffror på gamla år.
+        for falt, kandidater in {
+            "nettoskuld_historik": ("Net Debt",),
+            "investerat_kapital_historik": ("Invested Capital",),
+            "totala_tillgangar_historik": ("Total Assets",),
+            "rantebarande_skulder_historik": ("Total Debt",),
+        }.items():
+            serie = _arsserie(balans, *kandidater)
+            if serie is None:
+                bd.markera_saknat(
+                    falt, f"raden {kandidater[0]} saknades i balansräkningen"
+                )
+                continue
+            vaxling.satt_serie(falt, serie[: self.ar_historik],
+                               f"{kalla} ({len(serie[: self.ar_historik])} år)")
+
         aktieserie = _arsserie(balans, "Ordinary Shares Number", "Share Issued")
         if aktieserie:
             # Styckantal -- räknas aldrig om till kronor.

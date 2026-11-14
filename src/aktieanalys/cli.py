@@ -792,6 +792,96 @@ def _aterskapa_databas(args: argparse.Namespace) -> int:
     return 0
 
 
+def _backtest(args: argparse.Namespace) -> int:
+    import datetime as dt
+
+    from aktieanalys.backtest import kor_backtest
+    from aktieanalys.data.lager import Lager
+
+    inst = las_installningar(args.config)
+    logg.satt_upp(inst.config.loggning.niva, inst.loggfil)
+    if not inst.databasvag.exists():
+        print("Databasen finns inte än. Kör först: python -m aktieanalys hamta-data")
+        return 1
+
+    b = inst.config.backtest
+    start = dt.date.fromisoformat(args.fran) if args.fran else b.start
+    slut = dt.date.fromisoformat(args.till) if args.till else dt.date.today()
+
+    print("=" * 68)
+    print("LÄS DET HÄR FÖRST")
+    print("=" * 68)
+    print("Backtestet är en rimlighetskontroll av reglerna, inte ett bevis")
+    print("för att de fungerar. Antalet beslut är för litet för att säga")
+    print("något statistiskt, och flera antaganden ligger under siffrorna.")
+    print("Varningarna listas i sin helhet efter resultatet.\n")
+
+    with Lager(inst.databasvag) as lager:
+        data = {}
+        for ticker in inst.alla_tickers():
+            bd = lager.las(ticker, dt.date.today())
+            if bd is not None:
+                data[ticker] = bd
+        print(f"Kör {start} till {slut} med {len(data)} bolag. "
+              f"Det tar en stund.\n")
+        resultat = kor_backtest(
+            inst, data, lager, start, slut,
+            startkapital=b.startkapital_kr,
+            fordrojning_manader=b.rapportfordrojning_manader,
+            jamforelseindex=b.jamforelseindex,
+        )
+
+    print("\n" + "=" * 68)
+    print("RESULTAT")
+    print("=" * 68)
+    print(f"Period            {resultat.start} till {resultat.slut} "
+          f"({resultat.ar:.1f} år)")
+    print(f"Startkapital      {resultat.startkapital:>12,.0f} kr"
+          .replace(",", " "))
+    print(f"Slutvärde         {resultat.slutvarde:>12,.0f} kr"
+          .replace(",", " "))
+    print(f"Avkastning        {resultat.avkastning:>12.1f} %   "
+          f"({resultat.arsavkastning:.1f} % per år)")
+    print(f"Handelskostnader  {resultat.total_kostnad():>12,.0f} kr"
+          .replace(",", " "))
+
+    print("\nJÄMFÖRELSE")
+    for namn in resultat.index:
+        avk = resultat.indexavkastning(namn)
+        if avk is None:
+            continue
+        skillnad = resultat.avkastning - avk
+        print(f"  {namn:36} {avk:7.1f} %   "
+              f"portföljen {skillnad:+.1f} procentenheter")
+    if not resultat.index:
+        print("  inga index kunde hämtas")
+
+    print("\nOMSÄTTNING PER ÅR")
+    print(f"  {'år':6} {'byten':>6} {'köp':>5} {'omsättning':>12} {'kostnad':>10}")
+    for ar, rad in resultat.per_ar().items():
+        print(f"  {ar:6} {rad['byten']:6.0f} {rad['kop']:5.0f} "
+              f"{rad['omsattning_procent']:11.1f} % {rad['kostnad']:9.0f} kr")
+
+    if resultat.affarer:
+        print(f"\nAFFÄRER ({len(resultat.affarer)})")
+        for a in resultat.affarer:
+            print(f"  {a.datum}  {a.typ:4} {a.ticker:14} {a.kategori:16} "
+                  f"{a.belopp:9,.0f} kr  kostnad {a.kostnad:6.0f} kr"
+                  .replace(",", " "))
+    else:
+        print("\nInga affärer genomfördes under perioden.")
+
+    print("\n" + "=" * 68)
+    print("VARNINGAR -- läs dem innan du drar slutsatser")
+    print("=" * 68)
+    for v in resultat.varningar:
+        print(f"  * {v}")
+    print("\n  Kursdata är äkta historisk. Det arkiv du bygger upp från och")
+    print("  med nu blir med tiden den tillförlitliga källan -- om några år")
+    print("  går det här att göra på riktigt.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="python -m aktieanalys",
@@ -925,6 +1015,16 @@ def main(argv: list[str] | None = None) -> int:
     p_ater.add_argument("--tvinga", action="store_true",
                         help="ersätt en befintlig databasfil")
     p_ater.set_defaults(func=_aterskapa_databas)
+
+    p_back = under.add_parser(
+        "backtest",
+        help="kör reglerna historiskt (läs varningarna -- det är en "
+             "rimlighetskontroll, inte ett bevis)",
+    )
+    p_back.add_argument("--fran", metavar="ÅÅÅÅ-MM-DD",
+                        help="startdatum (standard: backtest.start i config)")
+    p_back.add_argument("--till", metavar="ÅÅÅÅ-MM-DD", help="slutdatum")
+    p_back.set_defaults(func=_backtest)
 
     args = p.parse_args(argv)
     logg.satt_upp()

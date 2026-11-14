@@ -300,6 +300,36 @@ data:
 
 
 # ---------------------------------------------------------------------
+#  BACKTEST
+# ---------------------------------------------------------------------
+#  Kör reglerna historiskt. LÄS VARNINGARNA I RAPPORTEN -- backtestet är
+#  en rimlighetskontroll av reglerna, inte ett bevis för att de fungerar.
+# ---------------------------------------------------------------------
+backtest:
+  # yfinance ger fyra räkenskapsår. Med rapportfördröjning blir det
+  # tidigaste användbara datumet ungefär april året efter det äldsta
+  # bokslutet.
+  start: "2023-06-01"
+  startkapital_kr: 300000
+
+  # Ett bokslut för år Y antas offentliggjort så här många månader efter
+  # årsskiftet. Svenska bolag rapporterar i praktiken i februari, så tre
+  # månader är försiktigt -- vilket är rätt håll att fela åt.
+  rapportfordrojning_manader: 3
+
+  # Jämförelseindex. OBS: portföljen räknas på utdelningsjusterade
+  # kurser, så bara index som också innehåller utdelningar är rättvisa
+  # att jämföra med. XACT-OMXS30 är börshandlade fonden och inkluderar
+  # utdelningar. ^OMX och ^OMXSPI är PRISINDEX utan utdelningar och
+  # ligger därför systematiskt för lågt -- de är med som referens, inte
+  # som rättvis måttstock.
+  jamforelseindex:
+    "OMXS30 inkl. utdelningar": "XACT-OMXS30.ST"
+    "OMXS30 prisindex": "^OMX"
+    "Stockholm hela listan, prisindex": "^OMXSPI"
+
+
+# ---------------------------------------------------------------------
 #  LOGGNING
 # ---------------------------------------------------------------------
 loggning:

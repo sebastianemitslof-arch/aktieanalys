@@ -204,6 +204,13 @@ class Datainstallningar(_Bas):
     paus_mellan_bolag_sek: float = Field(default=0.7, ge=0, le=60)
 
 
+class Backtestinstallningar(_Bas):
+    start: dt.date
+    startkapital_kr: float = Field(gt=0)
+    rapportfordrojning_manader: int = Field(ge=0, le=24)
+    jamforelseindex: dict[str, str] = Field(default_factory=dict)
+
+
 class Logginstallningar(_Bas):
     niva: Literal["DEBUG", "INFO", "WARNING", "ERROR"]
     fil: str = Field(min_length=1)
@@ -217,6 +224,7 @@ class Config(_Bas):
     kostnader: Kostnadsinstallningar
     rapport: Rapportinstallningar
     data: Datainstallningar
+    backtest: Backtestinstallningar
     loggning: Logginstallningar
 
 
