@@ -91,7 +91,7 @@ kategorier:
   #    # - TRAC-B.ST      # Traction -- avstängt: kräver manuell data
   #    # - ORES.ST        # Investment AB Oresund -- avstängt: kräver manuell data
 
-  Halsovard:
+  Hälsovård:
     mattuppsattning: standard
     bolag:
       - AZN.ST         # AstraZeneca

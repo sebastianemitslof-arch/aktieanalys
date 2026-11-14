@@ -298,7 +298,7 @@ def test_urvalet_pa_verklig_data():
     assert urval.antal_med > 40
     # De fyra kategorier som har full automatisk täckning ska vara
     # rangordningsbara utan manuell komplettering.
-    for kategori in ["Industri", "Halsovard", "Konsument", "Teknik"]:
+    for kategori in ["Industri", "Hälsovård", "Konsument", "Teknik"]:
         ku = urval.kategorier[kategori]
         assert ku.rangordningsbar, kategori
         assert len(ku.anvandbara_matt) == 7, kategori

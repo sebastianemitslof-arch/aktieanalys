@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Veckorapport {{ r.datum }}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin:0; padding:0; background:#f4f4f2;
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+         color:#1c1c1a; line-height:1.5; -webkit-text-size-adjust:100%; }
+  .wrap { max-width:620px; margin:0 auto; padding:16px; }
+  .kort { background:#fff; border:1px solid #e2e2de; border-radius:8px;
+          padding:16px; margin-bottom:14px; }
+  h1 { font-size:20px; margin:0 0 4px; font-weight:600; }
+  h2 { font-size:15px; margin:0 0 10px; font-weight:600;
+       text-transform:uppercase; letter-spacing:.04em; color:#56564f; }
+  h3 { font-size:15px; margin:0 0 6px; font-weight:600; }
+  .dampad { color:#6b6b63; font-size:13px; }
+  .liten { font-size:12px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; font-weight:600; font-size:11px; text-transform:uppercase;
+       letter-spacing:.04em; color:#8a8a80; padding:0 10px 6px 0;
+       border-bottom:1px solid #e8e8e4; }
+  th:last-child, td:last-child { padding-right:2px; }
+  .h { min-width:62px; }
+  td { padding:7px 10px 7px 0; border-bottom:1px solid #f0f0ec; vertical-align:top; }
+  .nr { width:18px; padding-right:8px; }
+  tr:last-child td { border-bottom:none; }
+  .h { text-align:right; white-space:nowrap; }
+  tr.innehav td:first-child { padding-left:4px; }
+  .upp { color:#1f7a3d; } .ner { color:#a32e22; }
+  .innehav { background:#fbf8ed; }
+  .marke { display:inline-block; font-size:11px; font-weight:600; padding:1px 6px;
+           border-radius:3px; vertical-align:middle; }
+  .m-innehav { background:#f0e4bd; color:#6b5415; }
+  .m-ny { background:#e3e9f2; color:#2d4a73; }
+  .m-risk { background:#f6ddd8; color:#8c2d1f; }
+  .forslag { border-left:4px solid #1f7a3d; }
+  .bevakning { border-left:4px solid #b9b9ae; }
+  .villkor { font-size:13px; margin:8px 0 0; padding:0; list-style:none; }
+  .villkor li { padding:2px 0; }
+  .ja::before { content:"\2713\00a0\00a0"; color:#1f7a3d; font-weight:700; }
+  .nej::before { content:"\2715\00a0\00a0"; color:#a32e22; font-weight:700; }
+  .und::before { content:"\007E\00a0\00a0"; color:#9a7b1f; font-weight:700; }
+  .kostnad { background:#f7f7f4; border-radius:5px; padding:9px 11px;
+             font-size:13px; margin-top:10px; }
+  .fot { color:#8a8a80; font-size:12px; text-align:center; padding:6px 0 18px; }
+  @media (prefers-color-scheme: dark) {
+    body { background:#17171a; color:#e8e8e3; }
+    .kort { background:#212125; border-color:#35353a; }
+    th { color:#8e8e86; border-bottom-color:#35353a; }
+    td { border-bottom-color:#2b2b30; }
+    .dampad,.fot { color:#9a9a92; }
+    .innehav { background:#2a2720; }
+    .kostnad { background:#1c1c20; }
+    .upp { color:#5fbe80; } .ner { color:#e0796a; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kort">
+    <h1>Veckorapport {{ r.datum|svenskt_datum }}</h1>
+    <div class="dampad">
+      {{ r.sammanfattning() }}
+      {%- if r.forra_datum %} &middot; jämfört med {{ r.forra_datum }}{% endif %}
+    </div>
+    {% if not r.i_beslutsfonster %}
+    <div class="dampad" style="margin-top:8px">
+      Utanför beslutsfönster &mdash; rapporten är enbart bevakning.
+      Nästa fönster: {{ nasta_fonster }}.
+    </div>
+    {% endif %}
+  </div>
+
+  {# ---------------- BYTESFÖRSLAG ---------------- #}
+  {% for f in r.forslag %}
+  <div class="kort forslag">
+    <h2>Förslag &middot; {{ f.kategori }}</h2>
+    {% if f.typ == 'forstagangskop' %}
+      <h3>Köp {{ f.utmanare }}</h3>
+      <div class="dampad">Inget innehav i kategorin.
+        {{ f.utmanare }} rankar högst med {{ '%.1f'|format(f.utmanarpoang) }} poäng.</div>
+    {% else %}
+      <h3>{{ f.innehav }} &rarr; {{ f.utmanare }}</h3>
+      <div class="dampad">
+        {{ '%.1f'|format(f.innehavspoang) }} &rarr; {{ '%.1f'|format(f.utmanarpoang) }} poäng
+        ({{ '%+.1f'|format(f.forbattring_procent) }} %)
+      </div>
+    {% endif %}
+    {% if f.undantag %}
+      <div class="liten" style="margin-top:8px;color:#9a7b1f">
+        <strong>Undantag:</strong> {{ f.undantag }}</div>
+    {% endif %}
+    <ul class="villkor">
+      {% for v in f.villkor %}
+      <li class="{% if v.undantaget and not v.uppfyllt %}und{% elif v.ok %}ja{% else %}nej{% endif %}">
+        {{ v.text }}</li>
+      {% endfor %}
+    </ul>
+    {% if f.kostnad %}
+    <div class="kostnad">
+      <strong>Kostnad {{ '{:,.0f}'.format(f.kostnad.total_kr)|replace(',',' ') }} kr</strong>
+      av {{ '{:,.0f}'.format(f.kostnad.belopp_kr)|replace(',',' ') }} kr
+      ({{ '%.2f'|format(f.kostnad.total_procent) }} %)
+      {%- if not f.kostnad.kand_positionsstorlek %}, antagen position{% endif %}<br>
+      <span class="dampad">
+        {%- if f.kostnad.courtage_salj %}sälj {{ '%.0f'|format(f.kostnad.courtage_salj) }} kr +
+        {% endif %}köp {{ '%.0f'|format(f.kostnad.courtage_kop) }} kr +
+        spread {{ '%.0f'|format(f.kostnad.spread_kr) }} kr ({{ f.kostnad.spread_kalla }})
+        {%- if isk %} &middot; ISK, ingen vinstskatt{% endif %}
+      </span>
+      {% if f.kostnad.hog(varna_over) %}
+      <div class="ner liten" style="margin-top:5px">
+        Kostnaden överstiger {{ varna_over }} % av positionen.</div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {# ---------------- RISKFLAGGOR ---------------- #}
+  {% if r.riskflaggor %}
+  <div class="kort">
+    <h2>Flaggade risker</h2>
+    {% for ticker, b in r.riskflaggor.items() %}
+    <div style="margin-bottom:12px">
+      <h3>{{ ticker }}
+        {%- if b.fundamental_forsamring %}
+        <span class="marke m-risk">fundamental försämring</span>{% endif %}
+        <span class="dampad" style="font-weight:400">
+          {{ '%+.1f'|format(b.justering) }} % på poängen</span>
+      </h3>
+      <div class="liten">{{ b.motivering }}</div>
+      <ul class="villkor">
+        {% for risk in b.risker %}<li>&bull;&nbsp; {{ risk.som_text() }}</li>{% endfor %}
+      </ul>
+      {% if b.klamrad_fran %}
+      <div class="liten dampad" style="margin-top:4px">
+        Modellen föreslog {{ '%.1f'|format(b.klamrad_fran) }} %, kapat till mandatet.</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# ---------------- STÄLLNING PER KATEGORI ---------------- #}
+  {% for k in r.kategorier %}
+  <div class="kort bevakning">
+    <h2>{{ k.namn }}</h2>
+    {% if not k.rangordningsbar %}
+      <div class="dampad">Går inte att rangordna &mdash; för få bedömbara bolag.</div>
+    {% else %}
+    <table>
+      <tr><th class="nr">#</th><th>Bolag</th><th class="h">Poäng</th><th class="h">Mot&nbsp;förra</th></tr>
+      {% for rad in k.rader %}
+      <tr{% if rad.ar_innehav %} class="innehav"{% endif %}>
+        <td class="dampad nr">{{ rad.placering }}</td>
+        <td>
+          <strong>{{ rad.ticker }}</strong>
+          {%- if rad.ar_innehav %} <span class="marke m-innehav">innehav</span>{% endif %}
+          {%- if rad.ar_ny %} <span class="marke m-ny">ny</span>{% endif %}
+          {%- if rad.risker %} <span class="marke m-risk">risk</span>{% endif %}
+          <div class="dampad liten">{{ rad.visningsnamn }}</div>
+          {%- if rad.saknade_matt %}
+          <div class="dampad liten">saknar: {{ rad.saknade_matt|join(', ') }}</div>
+          {%- endif %}
+        </td>
+        <td class="h"><strong>{{ '%.1f'|format(rad.poang) if rad.poang is not none else '&ndash;' }}</strong>
+          {%- if rad.justering %}
+          <div class="dampad liten">{{ '%+.0f'|format(rad.justering) }} %</div>{% endif %}
+        </td>
+        <td class="h">
+          {%- if rad.forandring_poang is not none -%}
+            <span class="{{ 'upp' if rad.forandring_poang > 0 else 'ner' if rad.forandring_poang < 0 else 'dampad' }}">
+            {{ '%+.1f'|format(rad.forandring_poang) }}</span>
+            {%- if rad.forandring_placering %}
+            <div class="dampad liten">{{ '%+d'|format(rad.forandring_placering) }} plats</div>
+            {%- endif %}
+          {%- elif rad.ar_ny -%}<span class="dampad">ny</span>
+          {%- else -%}<span class="dampad">&ndash;</span>{%- endif -%}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% if k.innehav_varningar %}
+      {% for v in k.innehav_varningar %}
+      <div class="ner liten" style="margin-top:8px">{{ v }}</div>
+      {% endfor %}
+    {% endif %}
+    {% if k.beslut and not k.beslut.foreslas and k.beslut.ej_uppfyllda %}
+      <div class="dampad liten" style="margin-top:8px">
+        Inget byte: {{ k.beslut.ej_uppfyllda|map(attribute='text')|join('; ') }}.
+      </div>
+    {% endif %}
+    {% if k.bortvalda_matt %}
+      <div class="dampad liten" style="margin-top:6px">
+        Mått som inte kunde användas: {{ k.bortvalda_matt.keys()|join(', ') }}.
+      </div>
+    {% endif %}
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {# ---------------- DATAKVALITET ---------------- #}
+  {% if r.datakvalitet.nagot_att_visa %}
+  <div class="kort">
+    <h2>Underlaget</h2>
+    {% if r.datakvalitet.utan_data %}
+    <div class="liten" style="margin-bottom:8px"><strong>Utan data:</strong>
+      {{ r.datakvalitet.utan_data.keys()|join(', ') }}</div>
+    {% endif %}
+    {% if r.datakvalitet.obedombara %}
+    <div class="liten" style="margin-bottom:8px"><strong>Obedömbara:</strong>
+      {% for t, kat, orsak in r.datakvalitet.obedombara %}
+      <div class="dampad">{{ t }} ({{ kat }}) &mdash; {{ orsak }}</div>{% endfor %}
+    </div>
+    {% endif %}
+    {% if r.datakvalitet.gamla_varden %}
+    <div class="liten" style="margin-bottom:8px"><strong>Värden som börjar bli gamla:</strong>
+      {% for t, falt, alder in r.datakvalitet.gamla_varden[:8] %}
+      <div class="dampad">{{ t }} &middot; {{ falt }} &middot; {{ alder }} dagar</div>{% endfor %}
+    </div>
+    {% endif %}
+    {% if r.datakvalitet.uteslutna %}
+    <div class="liten"><strong>Uteslutna ur urvalet
+      ({{ r.datakvalitet.uteslutna|length }}):</strong>
+      {% for t, kat, orsak in r.datakvalitet.uteslutna %}
+      <div class="dampad">{{ t }} &mdash; {{ orsak }}</div>{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="fot">
+    Poängen är en <strong>relativ rangordning inom varje kategori</strong>,
+    inte en avkastningsprognos.<br>
+    Systemet analyserar och föreslår &mdash; det handlar aldrig.
+    Alla beslut är dina.<br>
+    {% if r.kvalitativt and r.kvalitativt.aktiverat %}
+      Kvalitativt lager: {{ r.kvalitativt.modell }}.
+    {% elif r.kvalitativt %}
+      Kvalitativt lager av: {{ r.kvalitativt.orsak_avstangt }}.
+    {% endif %}
+  </div>
+
+</div>
+</body>
+</html>

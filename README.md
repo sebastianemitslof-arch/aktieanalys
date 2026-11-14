@@ -22,7 +22,7 @@ konfigurationen.
 | 4 | Poängmodellen | **klart** |
 | 5 | Kvalitativt lager (Claude) | **klart** |
 | 6 | Bytesregler och kostnadsberäkning | **klart** |
-| 7 | Veckorapport som HTML och mejl | kommer |
+| 7 | Veckorapport som HTML och mejl | **klart** |
 | 8 | Schemaläggning via GitHub Actions | kommer |
 | 9 | Backtest mot OMXS30 | kommer |
 
@@ -250,6 +250,78 @@ Fyra regler, som alla ger tydliga felmeddelanden om du bryter dem:
 Du behöver bara fylla i de bolag du faktiskt vill kunna jämföra. Ett
 fastighetsbolag utan förvaltningsresultat utesluts ur sin kategori och
 listas i rapporten med orsak -- det får aldrig en gissad siffra.
+
+---
+
+## Veckorapporten
+
+Ett kommando kör hela kedjan: hämtar data, poängsätter, frågar Claude,
+prövar bytesreglerna, sparar veckans poäng och skickar rapporten.
+
+```bash
+python -m aktieanalys veckorapport
+```
+
+Det här är kommandot som schemaläggs i steg 8.
+
+### Prova utan att ändra något
+
+```bash
+python -m aktieanalys veckorapport --torrkor --utan-mejl
+```
+
+Sparar varken veckopoäng, rapportfil eller mejl. HTML-filen hamnar som
+`rapport-torrkorning.html` så att du kan öppna den i webbläsaren.
+
+Andra flaggor: `--utan-hamtning` (använd databasen som den är),
+`--utan-llm` (hoppa över Claude), `--utan-mejl`.
+
+### Vad rapporten innehåller
+
+Ordningen är vald efter vad du behöver veta först:
+
+1. **Bytesförslag**, med alla villkor och kostnaden i kronor
+2. **Flaggade risker** från det kvalitativa lagret
+3. **Ställning per kategori**: innehavet plus topp 3, med förändring
+   mot förra veckan i både poäng och placering
+4. **Underlaget**: uteslutna bolag, obedömbara bolag och värden som
+   börjar bli gamla
+
+Innehavet visas alltid, även när det rankar sist i sin kategori.
+Nya bolag i toppen märks `ny`, bolag med riskflagga märks `risk`.
+
+Rapporten är en enda HTML-fil på ungefär 8 kB, utan bilder och utan
+externa beroenden. Den fungerar i mörkt läge och är läsbar på telefon.
+
+### Ämnesraden säger vad som hänt
+
+Det viktigaste först, så att det syns i notisen på telefonen:
+
+```
+Aktieanalys 20 nov: 1 förslag (Industri)
+Aktieanalys 20 nov: fundamental försämring flaggad (B1.ST)
+Aktieanalys 20 nov: bevakning, 2 riskflaggor
+Aktieanalys 20 nov: bevakning, inget att agera på
+```
+
+### Mejlet
+
+Fyll i avsändare och mottagare i `config.yaml` under `rapport.mejl`.
+Lösenordet läses ur miljövariabeln `SMTP_LOSENORD` eller `.env`-filen
+— **aldrig ur config.yaml**.
+
+```
+SMTP_LOSENORD=abcd efgh ijkl mnop
+```
+
+För Gmail krävs ett **app-specifikt lösenord**, inte ditt vanliga
+kontolösenord. Du skapar det på myaccount.google.com under Säkerhet →
+Appspecifika lösenord (tvåstegsverifiering måste vara på). Server
+`smtp.gmail.com`, port 587.
+
+Går mejlet inte iväg är rapporten ändå sparad i `rapporter/`, och
+kommandot skriver ut varför. Ett mejlfel gör aldrig veckans analys
+oläsbar.
 
 ---
 

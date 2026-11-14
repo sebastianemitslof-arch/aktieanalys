@@ -656,6 +656,105 @@ def _visa_byten(args: argparse.Namespace) -> int:
     return 0
 
 
+def _veckorapport(args: argparse.Namespace) -> int:
+    """Hela kedjan: hämta, poängsätt, bedöm, rapportera."""
+    import datetime as dt
+
+    from aktieanalys.byten import bedom_byten, spara_veckans_poang
+    from aktieanalys.data.csv_komplettering import CsvFel
+    from aktieanalys.data.hamtare import Hamtare
+    from aktieanalys.data.lager import Lager
+    from aktieanalys.kvalitativ.klient import Kvalitativtlager
+    from aktieanalys.poang.modell import poangsatt
+    from aktieanalys.rapport.bygg import bygg_rapport
+    from aktieanalys.rapport.mejl import skicka
+    from aktieanalys.rapport.rendera import amnesrad, rendera, spara
+    from aktieanalys.universum import las_och_valj, valj_urval
+
+    inst = las_installningar(args.config)
+    logg.satt_upp(inst.config.loggning.niva, inst.loggfil)
+    idag = dt.date.today()
+
+    print(f"Veckorapport {idag}\n")
+
+    # --- 1. hämta data -------------------------------------------------
+    if args.utan_hamtning:
+        print("1/5  hoppar över hämtningen, använder databasen")
+        if not inst.databasvag.exists():
+            print("     databasen finns inte -- kör utan --utan-hamtning")
+            return 1
+    else:
+        print(f"1/5  hämtar data för {len(inst.alla_tickers())} bolag")
+        try:
+            hamtare = Hamtare(inst)
+        except CsvFel as e:
+            print(f"\nFel i en CSV-fil:\n  {e}\n", file=sys.stderr)
+            return 1
+        try:
+            hamtrapport = hamtare.hamta(idag=idag)
+            print(f"     {hamtrapport.sammanfattning()}")
+        finally:
+            hamtare.stang()
+
+    # --- 2. urval och poäng --------------------------------------------
+    print("2/5  väljer urval och poängsätter")
+    urval, data = las_och_valj(inst, idag)
+    tavla = poangsatt(inst, urval, data, idag)
+    print(f"     {urval.sammanfattning()}")
+    print(f"     {tavla.sammanfattning()}")
+
+    # --- 3. kvalitativt lager ------------------------------------------
+    print("3/5  kvalitativt lager")
+    kvalitativt = Kvalitativtlager(inst).bedom_urval(
+        tavla, data, utan_llm=args.utan_llm
+    )
+    print(f"     {kvalitativt.sammanfattning()}")
+
+    # --- 4. bytesregler ------------------------------------------------
+    print("4/5  bytesregler")
+    with Lager(inst.databasvag) as lager:
+        if not args.torrkor:
+            antal = spara_veckans_poang(lager, tavla, kvalitativt)
+            print(f"     sparade veckans poäng för {antal} bolag")
+        else:
+            print("     TORRKÖRNING: veckans poäng sparas inte")
+        beslut = bedom_byten(inst, tavla, data, lager, kvalitativt, idag)
+        print(f"     {beslut.sammanfattning()}")
+        rapport = bygg_rapport(
+            inst, urval, tavla, data, beslut, lager, kvalitativt,
+            antal_utmanare=inst.config.kvalitativt.antal_utmanare,
+        )
+
+    # --- 5. rapporten ---------------------------------------------------
+    print("5/5  bygger rapporten")
+    html = rendera(rapport)
+    amne = amnesrad(rapport)
+
+    if inst.config.rapport.spara_fil and not args.torrkor:
+        vag = spara(rapport, html)
+        print(f"     sparad: {vag}")
+    elif args.torrkor:
+        from pathlib import Path
+        vag = Path(args.config).resolve().parent / "rapport-torrkorning.html"
+        vag.write_text(html, encoding="utf-8")
+        print(f"     TORRKÖRNING, sparad som: {vag}")
+
+    if args.utan_mejl:
+        print("     mejl: avstängt med --utan-mejl")
+    else:
+        utskick = skicka(inst, amne, html, torrkor=args.torrkor)
+        print(f"     {utskick}")
+
+    print(f"\nKlart. {rapport.sammanfattning()}")
+    print(f"Ämnesrad: {amne}")
+    for f in rapport.forslag:
+        if f.typ == "forstagangskop":
+            print(f"  FÖRSLAG  {f.kategori}: köp {f.utmanare}")
+        else:
+            print(f"  FÖRSLAG  {f.kategori}: {f.innehav} -> {f.utmanare}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="python -m aktieanalys",
@@ -757,6 +856,23 @@ def main(argv: list[str] | None = None) -> int:
                          help="hoppa över det kvalitativa lagret")
     p_byten.add_argument("--datum", metavar="ÅÅÅÅ-MM-DD")
     p_byten.set_defaults(func=_visa_byten)
+
+    p_vecka = under.add_parser(
+        "veckorapport",
+        help="kör hela kedjan och skapar veckorapporten (detta är "
+             "kommandot som schemaläggs)",
+    )
+    p_vecka.add_argument("--utan-hamtning", action="store_true",
+                         dest="utan_hamtning",
+                         help="använd databasen som den är, hämta inget nytt")
+    p_vecka.add_argument("--utan-llm", action="store_true", dest="utan_llm",
+                         help="hoppa över det kvalitativa lagret")
+    p_vecka.add_argument("--utan-mejl", action="store_true", dest="utan_mejl",
+                         help="skapa rapporten men skicka inget mejl")
+    p_vecka.add_argument("--torrkor", action="store_true",
+                         help="ändra ingenting: spara varken veckopoäng, "
+                              "rapportfil eller mejl")
+    p_vecka.set_defaults(func=_veckorapport)
 
     args = p.parse_args(argv)
     logg.satt_upp()

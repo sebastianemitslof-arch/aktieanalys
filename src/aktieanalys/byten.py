@@ -37,6 +37,7 @@ from aktieanalys.konfig import Installningar
 from aktieanalys.kvalitativ.klient import Kvalitativtresultat
 from aktieanalys.logg import hamta
 from aktieanalys.poang.modell import Bolagspoang, Poangtavla
+from aktieanalys.text import kort_datum
 
 logg = hamta(__name__)
 
@@ -283,7 +284,7 @@ def _bedom_kategori(
         kb.villkor.append(Villkor(
             "beslutsfönster", i_fonster,
             "inom beslutsfönster" if i_fonster
-            else f"utanför beslutsfönster ({datum:%d %b}) -- enbart bevakning",
+            else f"utanför beslutsfönster ({kort_datum(datum)}) \u2013 bevakning",
         ))
         kb.kostnad = berakna_kostnad(inst, None, data.get(basta.ticker), saljer=False)
         kb.foreslas = all(v.ok for v in kb.villkor)
@@ -328,7 +329,7 @@ def _bedom_kategori(
     )
     if forsamring:
         kb.undantag = (
-            "fundamental försämring flaggad i innehavet -- kraven på "
+            "fundamental försämring flaggad i innehavet \u2013 kraven på "
             "innehavstid och beslutsfönster åsidosätts"
         )
 
@@ -369,7 +370,7 @@ def _bedom_kategori(
         kb.villkor.append(Villkor(
             "beslutsfönster", i_fonster,
             "inom beslutsfönster" if i_fonster
-            else f"utanför beslutsfönster ({datum:%d %b}) -- enbart bevakning",
+            else f"utanför beslutsfönster ({kort_datum(datum)}) \u2013 bevakning",
             undantaget=forsamring,
         ))
 
