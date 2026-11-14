@@ -755,6 +755,43 @@ def _veckorapport(args: argparse.Namespace) -> int:
     return 0
 
 
+def _dumpa_databas(args: argparse.Namespace) -> int:
+    from aktieanalys.data.lager import Lager
+
+    inst = las_installningar(args.config)
+    logg.satt_upp(inst.config.loggning.niva, inst.loggfil)
+    if not inst.databasvag.exists():
+        print(f"Databasen finns inte: {inst.databasvag}")
+        return 1
+    vag = inst.rotkatalog / args.fil
+    with Lager(inst.databasvag) as lager:
+        rader = lager.dumpa(vag)
+    storlek = vag.stat().st_size / 1_048_576
+    print(f"Dumpade {rader:,} rader till {vag} ({storlek:.1f} MB).")
+    print("Dumpen är sorterad, så varje ny vecka blir ett litet tillägg "
+          "i filen i stället för en helt ny version.")
+    return 0
+
+
+def _aterskapa_databas(args: argparse.Namespace) -> int:
+    from aktieanalys.data.lager import aterskapa
+
+    inst = las_installningar(args.config)
+    logg.satt_upp(inst.config.loggning.niva, inst.loggfil)
+    vag = inst.rotkatalog / args.fil
+    if not vag.exists():
+        print(f"Ingen dump att återskapa från: {vag}")
+        return 1
+    if inst.databasvag.exists() and not args.tvinga:
+        print(f"{inst.databasvag} finns redan. Kör med --tvinga för att "
+              f"ersätta den med innehållet i dumpen.")
+        return 1
+    antal = aterskapa(vag, inst.databasvag)
+    print(f"Återskapade {inst.databasvag} ur {vag.name} "
+          f"({antal:,} fundamentavärden).")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="python -m aktieanalys",
@@ -873,6 +910,21 @@ def main(argv: list[str] | None = None) -> int:
                          help="ändra ingenting: spara varken veckopoäng, "
                               "rapportfil eller mejl")
     p_vecka.set_defaults(func=_veckorapport)
+
+    p_dump = under.add_parser(
+        "dumpa-databas",
+        help="skriver databasen som sorterad SQL-text (det som versionshanteras)",
+    )
+    p_dump.add_argument("--fil", default="data/cache.sql")
+    p_dump.set_defaults(func=_dumpa_databas)
+
+    p_ater = under.add_parser(
+        "aterskapa-databas", help="bygger upp databasen ur textdumpen",
+    )
+    p_ater.add_argument("--fil", default="data/cache.sql")
+    p_ater.add_argument("--tvinga", action="store_true",
+                        help="ersätt en befintlig databasfil")
+    p_ater.set_defaults(func=_aterskapa_databas)
 
     args = p.parse_args(argv)
     logg.satt_upp()

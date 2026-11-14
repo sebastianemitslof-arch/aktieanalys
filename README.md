@@ -23,7 +23,7 @@ konfigurationen.
 | 5 | Kvalitativt lager (Claude) | **klart** |
 | 6 | Bytesregler och kostnadsberäkning | **klart** |
 | 7 | Veckorapport som HTML och mejl | **klart** |
-| 8 | Schemaläggning via GitHub Actions | kommer |
+| 8 | Schemaläggning via GitHub Actions | **klart** |
 | 9 | Backtest mot OMXS30 | kommer |
 
 ---
@@ -250,6 +250,99 @@ Fyra regler, som alla ger tydliga felmeddelanden om du bryter dem:
 Du behöver bara fylla i de bolag du faktiskt vill kunna jämföra. Ett
 fastighetsbolag utan förvaltningsresultat utesluts ur sin kategori och
 listas i rapporten med orsak -- det får aldrig en gissad siffra.
+
+---
+
+## Automatisk veckokörning
+
+Rapporten körs av GitHub varje söndag. Du behöver inte ha datorn på.
+
+### Sätt upp det en gång
+
+**1. Lägg in de två hemligheterna.** I repot på GitHub:
+Settings → Secrets and variables → Actions → *New repository secret*
+
+| Namn | Värde |
+|---|---|
+| `ANTHROPIC_API_KEY` | nyckeln från console.anthropic.com |
+| `SMTP_LOSENORD` | app-specifikt lösenord för mejlkontot |
+
+Secrets visas aldrig i loggarna och går inte att läsa ut igen.
+
+**2. Fyll i mejladresserna** i `config.yaml` under `rapport.mejl` och
+pusha ändringen.
+
+**3. Provkör.** Gå till fliken **Actions** → *Veckorapport* → *Run
+workflow*. Bocka i **torrkör** första gången: då ändras ingenting, men
+du ser om allt fungerar. Rapporten går att ladda ner längst ned på
+körningens sida.
+
+### Ändra tiden
+
+I `.github/workflows/veckorapport.yml`:
+
+```yaml
+    - cron: "37 16 * * 0"
+```
+
+Fälten är `minut timme dag månad veckodag`, i **UTC**. `0` är söndag.
+`37 16 * * 0` blir 17:37 svensk vintertid, 18:37 sommartid.
+
+Udda minuttal är medvetet: scheman på hel timme köar hos GitHub och
+blir ofta försenade med upp till en timme.
+
+### Köra för hand
+
+Fliken Actions → *Veckorapport* → *Run workflow*, med tre val:
+
+* **utan_llm** — hoppa över Claude (gratis provkörning)
+* **utan_mejl** — bygg rapporten men skicka inget
+* **torrkor** — ändra ingenting alls
+
+### Om något går fel
+
+GitHub mejlar dig automatiskt när en schemalagd körning misslyckas.
+Rapporten och loggfilen sparas som nedladdningsbara filer på körningens
+sida i 90 dagar, även när körningen gått fel.
+
+**Scheman stängs av efter 60 dagars stiltje i repot.** Det här flödet
+committar databasen varje vecka, vilket räknas som aktivitet, så det
+håller sig självt vid liv.
+
+---
+
+## Databasen som text
+
+Databasen versionshanteras som **sorterad SQL-text** i `data/cache.sql`,
+inte som SQLite-fil. Skälet är mätt:
+
+| | Per vecka | Per år |
+|---|---|---|
+| SQLite-fil | ~10 MB ny binär kopia | ~500 MB |
+| Sorterad textdump | ~10 kB tillägg | ~0,5 MB |
+
+En SQLite-fil skrivs om på tvären varje gång den ändras, så git lagrar
+en helt ny kopia varje vecka. En **sorterad** textdump växer i stället
+med bara det som faktiskt tillkommit, och git lagrar skillnaden.
+
+Sorteringen är hela poängen. Hamnade omskrivna rader sist i filen skulle
+git se en stor omkastning i stället för en liten ändring, och vinsten
+vore borta. Ett test vaktar det.
+
+Jobbar du lokalt bygger du upp databasen ur dumpen:
+
+```bash
+python -m aktieanalys aterskapa-databas
+```
+
+och skriver tillbaka den efter en körning:
+
+```bash
+python -m aktieanalys dumpa-databas
+```
+
+Veckokörningen gör båda automatiskt. Själva SQLite-filen ligger i
+`.gitignore` och ska inte checkas in.
 
 ---
 
@@ -741,7 +834,8 @@ Står det "omräknat från USD" i källkolumnen har omräkningen gjorts.
 **Cache.** Data som hämtats nyligen hämtas inte igen. yfinance är
 inofficiellt och tål inte att pressas.
 
-**Arkiv.** Varje hämtning sparas med datum och skrivs aldrig över med
+**Arkiv.** Versionshanteras som sorterad text i `data/cache.sql` --
+se avsnittet *Databasen som text*. Varje hämtning sparas med datum och skrivs aldrig över med
 ingenting. Missar Yahoo ett nyckeltal en vecka behålls förra veckans
 värde, och rapporten visar hur gammalt det är. Det betyder också att
 täckningssiffrorna speglar vad systemet **vet**, inte vad ett enskilt

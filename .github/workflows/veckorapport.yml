@@ -1,0 +1,136 @@
+# =====================================================================
+#  Veckorapporten, körd automatiskt av GitHub Actions
+# =====================================================================
+#  Körs varje söndag och mejlar rapporten. Du behöver inte ha datorn på.
+#
+#  Innan den fungerar måste två hemligheter läggas in i repot:
+#  Settings -> Secrets and variables -> Actions -> New repository secret
+#
+#    ANTHROPIC_API_KEY   nyckeln från console.anthropic.com
+#    SMTP_LOSENORD       app-specifikt lösenord för mejlkontot
+#
+#  Vill du köra utan Claude eller utan mejl går det att starta flödet
+#  för hand under fliken Actions, med flaggor.
+# =====================================================================
+
+name: Veckorapport
+
+on:
+  schedule:
+    # Söndagar 16:37 UTC = 17:37 svensk vintertid, 18:37 sommartid.
+    # Udda minuttal med flit: scheman på hel timme köar hos GitHub och
+    # blir ofta försenade.
+    - cron: "37 16 * * 0"
+
+  # Gör att du kan starta en körning för hand under fliken Actions.
+  workflow_dispatch:
+    inputs:
+      utan_llm:
+        description: "Hoppa över Claude (sparar pengar vid provkörning)"
+        type: boolean
+        default: false
+      utan_mejl:
+        description: "Skicka inget mejl"
+        type: boolean
+        default: false
+      torrkor:
+        description: "Ändra ingenting: spara varken poäng, fil eller mejl"
+        type: boolean
+        default: false
+
+# Behövs för att kunna committa tillbaka databasen och rapporten.
+permissions:
+  contents: write
+
+# Två körningar samtidigt skulle skriva över varandras databas.
+concurrency:
+  group: veckorapport
+  cancel-in-progress: false
+
+jobs:
+  rapport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      TZ: Europe/Stockholm
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SMTP_LOSENORD: ${{ secrets.SMTP_LOSENORD }}
+
+    steps:
+      - name: Hämta repot
+        uses: actions/checkout@v4
+
+      - name: Sätt upp Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installera programmet
+        run: pip install -e .
+
+      - name: Kontrollera konfigurationen
+        run: python -m aktieanalys kontrollera-config
+
+      - name: Bygg upp databasen ur textdumpen
+        run: |
+          if [ -f data/cache.sql ]; then
+            python -m aktieanalys aterskapa-databas --tvinga
+          else
+            echo "Ingen dump ännu - databasen byggs från noll i den här körningen."
+          fi
+
+      - name: Kör veckorapporten
+        run: |
+          flaggor=""
+          if [ "${{ inputs.utan_llm }}" = "true" ];  then flaggor="$flaggor --utan-llm"; fi
+          if [ "${{ inputs.utan_mejl }}" = "true" ]; then flaggor="$flaggor --utan-mejl"; fi
+          if [ "${{ inputs.torrkor }}" = "true" ];   then flaggor="$flaggor --torrkor"; fi
+          echo "Kör med:$flaggor"
+          python -m aktieanalys veckorapport $flaggor
+
+      - name: Skriv databasen till textdumpen
+        if: ${{ inputs.torrkor != true }}
+        run: python -m aktieanalys dumpa-databas
+
+      - name: Spara rapporten som nedladdningsbar fil
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: veckorapport
+          path: |
+            rapporter/*.html
+            data/korning.log
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Committa veckans data
+        if: ${{ inputs.torrkor != true }}
+        run: |
+          git config user.name "aktieanalys"
+          git config user.email "actions@github.com"
+          git add data/cache.sql rapporter/
+
+          if git diff --cached --quiet; then
+            echo "Inget nytt att spara."
+            exit 0
+          fi
+
+          git commit -m "Veckorapport $(date +%Y-%m-%d)
+
+          Automatisk körning. Innehåller veckans hämtade data, veckans
+          poäng och rapporten."
+
+          # En annan körning kan ha hunnit före; hämta in den först.
+          for forsok in 1 2 3; do
+            if git push; then
+              echo "Sparat."
+              exit 0
+            fi
+            echo "Push nekades, försök $forsok - hämtar in och prövar igen."
+            git pull --rebase --autostash || true
+            sleep 5
+          done
+          echo "Kunde inte pusha. Rapporten finns kvar som nedladdningsbar fil."
+          exit 1

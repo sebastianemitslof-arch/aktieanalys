@@ -220,3 +220,158 @@ def test_ta_bort_harledda_ror_inte_csv_eller_yfinance(lager):
 
 def test_ta_bort_harledda_for_okant_falt_ar_ofarligt(lager):
     assert lager.ta_bort_harledda("belaningsgrad") == 0
+
+
+# =====================================================================
+#  Textdump: databasen i en form git kan hantera
+# =====================================================================
+def test_dumpen_gar_att_aterskapa(lager, tmp_path):
+    from aktieanalys.data.lager import aterskapa
+
+    lager.spara(bolag(dt.date(2026, 11, 13), 100.0, nettoskuld=5e9,
+                      rorelseresultat_historik=[(2025, 1e9), (2024, 0.9e9)]))
+    lager.spara_kurser("TEST.ST", pd.Series(
+        [98.0, 99.0], index=pd.to_datetime(["2026-11-12", "2026-11-13"])))
+    lager.logga_hamtning("TEST.ST", dt.date(2026, 11, 13), "test", "ok", 3)
+    lager.spara_veckopoang(dt.date(2026, 11, 13), [
+        {"ticker": "TEST.ST", "kategori": "Industri", "poang_slutlig": 61.2,
+         "poang_kvantitativ": 60.0, "placering": 1, "ar_innehav": True,
+         "justering": 2.0}])
+    fore = lager.statistik()
+
+    dump = tmp_path / "d.sql"
+    lager.dumpa(dump)
+    aterskapa(dump, tmp_path / "ny.sqlite")
+
+    with Lager(tmp_path / "ny.sqlite") as ny:
+        assert ny.statistik() == fore
+        tillbaka = ny.las("TEST.ST", dt.date(2026, 11, 13))
+        assert tillbaka.varde("kurs") == 100.0
+        assert tillbaka.varde("rorelseresultat_historik") == [
+            (2025, 1e9), (2024, 0.9e9)]
+        assert len(ny.las_kurser("TEST.ST")) == 2
+        assert ny.veckopoang_vid(dt.date(2026, 11, 13), "Industri")[
+            "TEST.ST"]["justering"] == 2.0
+
+
+def test_dumpen_ar_deterministisk(lager, tmp_path):
+    """Samma databas ska ge exakt samma fil varje gång."""
+    for d in [dt.date(2026, 11, 6), dt.date(2026, 11, 13)]:
+        lager.spara(bolag(d, 100.0))
+    a, b = tmp_path / "a.sql", tmp_path / "b.sql"
+    lager.dumpa(a)
+    lager.dumpa(b)
+
+    rader_a = [r for r in a.read_text().splitlines() if r.startswith("INSERT")]
+    rader_b = [r for r in b.read_text().splitlines() if r.startswith("INSERT")]
+    assert rader_a == rader_b
+
+
+def test_overskriven_rad_flyttar_sig_inte_i_dumpen(lager, tmp_path):
+    """Hela vinsten med textdumpen bygger på att den är sorterad.
+
+    Kör man om en vecka skrivs raderna över. Hamnade de då sist i filen
+    skulle git se en stor omkastning i stället för en liten ändring, och
+    repot skulle växa lika fort som med en binär databas.
+    """
+    for t in ["AAA.ST", "BBB.ST", "CCC.ST"]:
+        bd = Bolagsdata(ticker=t, hamtad=dt.date(2026, 11, 13))
+        bd.satt("kurs", 100.0, "test")
+        lager.spara(bd)
+
+    fore = tmp_path / "fore.sql"
+    lager.dumpa(fore)
+
+    # Skriv om mittenbolagets värde, som vid en omkörning samma dag
+    bd = Bolagsdata(ticker="BBB.ST", hamtad=dt.date(2026, 11, 13))
+    bd.satt("kurs", 123.0, "test")
+    lager.spara(bd)
+
+    efter = tmp_path / "efter.sql"
+    lager.dumpa(efter)
+
+    rader_fore = fore.read_text().splitlines()
+    rader_efter = efter.read_text().splitlines()
+    assert len(rader_fore) == len(rader_efter)
+
+    olika = [i for i, (a, b) in enumerate(zip(rader_fore, rader_efter)) if a != b]
+    assert len(olika) == 1, "bara en rad ska ha ändrats, inte flyttats om"
+    assert "BBB.ST" in rader_efter[olika[0]]
+    assert "123.0" in rader_efter[olika[0]]
+
+
+def test_ny_vecka_blir_ett_litet_tillagg(lager, tmp_path):
+    """En ny vecka ska lägga till rader, inte kasta om de gamla."""
+    for t in ["AAA.ST", "BBB.ST"]:
+        bd = Bolagsdata(ticker=t, hamtad=dt.date(2026, 11, 6))
+        bd.satt("kurs", 100.0, "test")
+        lager.spara(bd)
+    v1 = tmp_path / "v1.sql"
+    lager.dumpa(v1)
+
+    for t in ["AAA.ST", "BBB.ST"]:
+        bd = Bolagsdata(ticker=t, hamtad=dt.date(2026, 11, 13))
+        bd.satt("kurs", 110.0, "test")
+        lager.spara(bd)
+    v2 = tmp_path / "v2.sql"
+    lager.dumpa(v2)
+
+    gamla = set(v1.read_text().splitlines())
+    nya = set(v2.read_text().splitlines())
+    assert gamla <= nya, "inga gamla rader ska ha ändrats"
+    # Två nya kursvärden plus två rader i bolagsmeta (ett bolag, ett datum).
+    assert len(nya - gamla) == 4, "bara veckans egna rader ska tillkomma"
+
+
+def test_dumpen_tar_inte_med_sqlites_egna_tabeller(lager, tmp_path):
+    """sqlite_sequence skapas av motorn och går inte att skapa om."""
+    lager.logga_hamtning("A.ST", dt.date(2026, 11, 13), "test", "ok")
+    dump = tmp_path / "d.sql"
+    lager.dumpa(dump)
+    assert "sqlite_sequence" not in dump.read_text()
+
+
+def test_aterskapning_utan_dump_ger_fel(tmp_path):
+    from aktieanalys.data.lager import aterskapa
+
+    with pytest.raises(FileNotFoundError):
+        aterskapa(tmp_path / "finns-inte.sql", tmp_path / "ny.sqlite")
+
+
+def test_aterskapning_ersatter_befintlig_databas(lager, tmp_path):
+    from aktieanalys.data.lager import aterskapa
+
+    lager.spara(bolag(dt.date(2026, 11, 13), 100.0))
+    dump = tmp_path / "d.sql"
+    lager.dumpa(dump)
+
+    mal = tmp_path / "mal.sqlite"
+    with Lager(mal) as gammal:
+        gammal.spara(bolag(dt.date(2026, 11, 13), 999.0))
+    aterskapa(dump, mal)
+
+    with Lager(mal) as ny:
+        assert ny.las("TEST.ST", dt.date(2026, 11, 13)).varde("kurs") == 100.0
+
+
+def test_den_verkliga_databasen_gar_att_dumpa_och_aterskapa(tmp_path):
+    from aktieanalys.data.lager import aterskapa
+    from aktieanalys.konfig import las_installningar
+    from tests.conftest import KONFIGKATALOG
+
+    inst = las_installningar(KONFIGKATALOG)
+    if not inst.databasvag.exists():
+        pytest.skip("ingen databas -- kör hamta-data först")
+
+    dump = tmp_path / "d.sql"
+    with Lager(inst.databasvag) as original:
+        original.dumpa(dump)
+        fore = original.statistik()
+
+    aterskapa(dump, tmp_path / "ny.sqlite")
+    with Lager(tmp_path / "ny.sqlite") as ny:
+        efter = ny.statistik()
+
+    for nyckel in ["bolag", "varden", "kursrader", "saknade_varden",
+                   "hamtningar", "forsta_datum", "senaste_datum"]:
+        assert fore[nyckel] == efter[nyckel], nyckel

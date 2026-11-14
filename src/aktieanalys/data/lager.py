@@ -100,6 +100,31 @@ CREATE INDEX IF NOT EXISTS ix_hamtlogg_datum ON hamtlogg (datum);
 """
 
 
+def aterskapa(dumpvag: Path | str, databasvag: Path | str) -> int:
+    """Bygger upp databasen ur en textdump.
+
+    Den befintliga databasfilen ersätts. Används i veckokörningen, där
+    repot bara innehåller textdumpen.
+    """
+    dumpvag, databasvag = Path(dumpvag), Path(databasvag)
+    if not dumpvag.exists():
+        raise FileNotFoundError(f"ingen dump att återskapa från: {dumpvag}")
+
+    databasvag.parent.mkdir(parents=True, exist_ok=True)
+    if databasvag.exists():
+        databasvag.unlink()
+
+    db = sqlite3.connect(databasvag)
+    try:
+        db.executescript(dumpvag.read_text(encoding="utf-8"))
+        db.commit()
+        antal = db.execute("SELECT COUNT(*) FROM fundamenta").fetchone()[0]
+    finally:
+        db.close()
+    logg.info("återskapade databasen ur %s (%d fundamentavärden)", dumpvag, antal)
+    return antal
+
+
 class Lager:
     """Läser och skriver databasen. Används som context manager."""
 
@@ -435,6 +460,73 @@ class Lager:
                 (datum.isoformat(), kategori),
             )
         }
+
+    # =================================================================
+    #  Textdump: databasen i en form git kan hantera
+    # =================================================================
+    #: Tabellerna och vad de sorteras på. Sorteringen är det viktiga:
+    #: den gör dumpen DETERMINISTISK, så att en ny vecka blir ett litet
+    #: tillägg i filen i stället för att kasta om allt. Git lagrar då en
+    #: delta på några tiotals kilobyte i stället för en ny megabytefil.
+    DUMPORDNING = {
+        "fundamenta": "ticker, datum, falt",
+        "bolagsmeta": "ticker, datum",
+        "kurser": "ticker, datum",
+        "saknat": "ticker, datum, falt",
+        "veckopoang": "datum, ticker",
+        "hamtlogg": "id",
+    }
+
+    def dumpa(self, vag: Path | str) -> int:
+        """Skriver hela databasen som sorterad SQL-text.
+
+        En SQLite-fil skrivs om på tvären varje gång, så git lagrar en ny
+        binär kopia varje vecka -- ungefär en halv gigabyte per år för
+        den här databasen. En sorterad textdump växer i stället med det
+        som faktiskt tillkommit.
+        """
+        vag = Path(vag)
+        vag.parent.mkdir(parents=True, exist_ok=True)
+        rader = 0
+
+        with vag.open("w", encoding="utf-8", newline="\n") as f:
+            f.write(
+                "-- Databasdump för aktieanalys.\n"
+                "-- Sorterad med flit: det gör filen deterministisk, så att\n"
+                "-- git kan lagra varje vecka som en liten delta.\n"
+                "-- Återskapa med: python -m aktieanalys aterskapa-databas\n"
+                "PRAGMA foreign_keys=OFF;\n"
+                "BEGIN TRANSACTION;\n"
+            )
+            for sats in self.db.execute(
+                # sqlite_% är SQLites interna tabeller (t.ex.
+                # sqlite_sequence från AUTOINCREMENT). De skapas av
+                # motorn själv och går inte att skapa om ur en dump.
+                "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL "
+                "AND name NOT LIKE 'sqlite_%' ORDER BY type DESC, name"
+            ):
+                f.write(f"{sats[0]};\n")
+
+            for tabell, ordning in self.DUMPORDNING.items():
+                kolumner = [
+                    r["name"]
+                    for r in self.db.execute(f"PRAGMA table_info({tabell})")
+                ]
+                if not kolumner:
+                    continue
+                # quote() är SQLites egen escapning -- säkrare än att
+                # formatera värdena själv.
+                uttryck = " || ',' || ".join(f"quote({k})" for k in kolumner)
+                for rad in self.db.execute(
+                    f"SELECT 'INSERT INTO {tabell} VALUES(' || {uttryck} || ');' "
+                    f"FROM {tabell} ORDER BY {ordning}"
+                ):
+                    f.write(rad[0] + "\n")
+                    rader += 1
+            f.write("COMMIT;\n")
+
+        logg.info("dumpade %d rader till %s", rader, vag)
+        return rader
 
     def harledda_falt(self) -> dict[str, int]:
         """Fält som har härledda (proxy-)värden i databasen, med antal rader."""

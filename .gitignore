@@ -10,6 +10,16 @@ venv/
 .env
 *.key
 
-# OBS: data/cache.sqlite är med i repot MED FLIT.
-# Det är där historiken byggs upp, och GitHub Actions behöver kunna
-# läsa och skriva den mellan körningarna. Lägg den inte här.
+# Databasen versionshanteras som SORTERAD TEXT (data/cache.sql), inte
+# som SQLite-fil. En SQLite-fil skrivs om på tvären varje gång, så git
+# skulle lagra en ny binär kopia varje vecka -- ungefär en halv
+# gigabyte per år. Textdumpen växer i stället med det som faktiskt
+# tillkommit: ca 10 kB per vecka.
+#
+# Bygg upp databasen ur dumpen med:
+#   python -m aktieanalys aterskapa-databas
+data/cache.sqlite
+data/cache.sqlite-journal
+
+# Torrkörningar
+rapport-torrkorning.html
