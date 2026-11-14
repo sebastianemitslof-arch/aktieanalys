@@ -320,6 +320,46 @@ Prisindexen är med som referens, inte som måttstock. Skillnaden är
 ungefär 3–4 procentenheter per år — över fyra år är det enormt, och
 att jämföra mot dem hade fått vilken strategi som helst att se bra ut.
 
+### Det viktigaste backtestet gör
+
+Varje körning avslutas med en jämförelse mot **10 000 portföljer valda
+på måfå** — en aktie per kategori, hållna hela perioden. Det är det enda
+som gör avkastningssiffran tolkbar.
+
+Så här såg det ut för perioden juni 2023 till november 2026:
+
+```
+Avkastning               113.5 %   (24.6 % per år)
+  OMXS30 inkl. utdelningar                64.8 %   portföljen +48.8 procentenheter
+
+ÄR DET HÄR SKILLT FRÅN TUR?
+  10 000 portföljer valda på måfå, en aktie per kategori:
+    median                    51.2 %
+    5:e till 95:e percentilen   12.9 % till 161.5 %
+    likaviktad korg av alla bolag  61.5 %
+
+  Resultatet ligger på percentil 86. 14 procent av rena slumpval
+  gjorde bättre ifrån sig. Det går alltså INTE att skilja från tur.
+```
+
+Läs det en gång till. Modellen slog index med 48 procentenheter — och
+det betyder ingenting, för spridningen mellan rena slumpval är 150
+procentenheter bred. Med sex innehav och tre och ett halvt år är bruset
+större än allt en strategi rimligen kan åstadkomma.
+
+Två saker värda att notera i siffrorna:
+
+* **Den likaviktade korgen av alla 70 bolag gav 61,5 %** — under index.
+  Universumet är alltså inte källan till överavkastningen, vilket
+  utesluter den vanligaste formen av överlevnadsbias i ett sådant här
+  test. Det är en lättnad, men det gör inte resultatet signifikant.
+* **Modellen bytte sex gånger på tre och ett halvt år**, med 4 193 kr i
+  total handelskostnad på 300 000 kr. Reglerna gör alltså det de ska:
+  hålla omsättningen låg.
+
+Det andra är faktiskt det mest användbara backtestet ger. Avkastningen
+säger ingenting; omsättningen och kostnaden säger något.
+
 ### Så ändrar du
 
 I `config.yaml` under `backtest`: `start`, `startkapital_kr`,

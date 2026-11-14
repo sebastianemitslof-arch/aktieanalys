@@ -106,6 +106,45 @@ class Innehavspost:
 
 
 @dataclass
+class Slumpjamforelse:
+    """Var resultatet hamnar bland portföljer valda på måfå.
+
+    Det här är det enda som gör ett backtest med sex innehav och ett
+    par år tolkbart. Ligger resultatet mitt i fördelningen är det inte
+    skilt från tur, hur bra avkastningen än ser ut.
+    """
+
+    antal: int
+    median: float
+    percentil_5: float
+    percentil_95: float
+    percentil_for_resultatet: float
+    andel_som_slog_resultatet: float
+    likaviktad_korg: float | None = None
+
+    @property
+    def skild_fran_tur(self) -> bool:
+        """Konventionell gräns: resultatet ska ligga över percentil 95."""
+        return self.percentil_for_resultatet >= 95.0
+
+    def omdome(self) -> str:
+        if self.skild_fran_tur:
+            return (
+                f"Resultatet ligger på percentil "
+                f"{self.percentil_for_resultatet:.0f} -- över den gräns där "
+                f"det börjar gå att skilja från tur. Det är fortfarande EN "
+                f"period och sex innehav."
+            )
+        return (
+            f"Resultatet ligger på percentil "
+            f"{self.percentil_for_resultatet:.0f}. "
+            f"{self.andel_som_slog_resultatet:.0f} procent av rena slumpval "
+            f"gjorde bättre ifrån sig. Det går alltså INTE att skilja från "
+            f"tur."
+        )
+
+
+@dataclass
 class Backtestresultat:
     start: dt.date
     slut: dt.date
@@ -115,6 +154,7 @@ class Backtestresultat:
     affarer: list[Affar] = field(default_factory=list)
     varningar: list[str] = field(default_factory=list)
     rapportfordrojning: int = 3
+    slump: Slumpjamforelse | None = None
 
     @property
     def slutvarde(self) -> float:
@@ -404,11 +444,68 @@ def kor_backtest(
     resultat.slut = resultat.varden.index[-1].date() if len(resultat.varden) else slut
     if jamforelseindex:
         resultat.index = hamta_index(jamforelseindex, start, resultat.slut, lager)
+    resultat.slump = jamfor_med_slumpen(
+        inst, data, start, resultat.slut, resultat.avkastning
+    )
     logg.info(
         "backtest klart: %.1f %% totalt, %d affärer",
         resultat.avkastning, len(resultat.affarer),
     )
     return resultat
+
+
+def jamfor_med_slumpen(
+    inst: Installningar,
+    data: dict[str, Bolagsdata],
+    start: dt.date,
+    slut: dt.date,
+    resultat_procent: float,
+    antal: int = 10_000,
+    fro: int = 42,
+) -> Slumpjamforelse | None:
+    """Drar portföljer på måfå och ser var resultatet hamnar.
+
+    En portfölj med sex innehav över ett par år har enorm spridning.
+    Utan den här jämförelsen är avkastningssiffran oläsbar: den säger
+    ingenting om reglerna är bra, bara vad som råkade hända.
+    """
+    import numpy as np
+
+    per_kategori: list[np.ndarray] = []
+    alla: list[float] = []
+    for kategori, kat in inst.universum.kategorier.items():
+        faktorer = []
+        for ticker in kat.bolag:
+            bd = data.get(ticker)
+            serie = bd.varde("kurshistorik") if bd else None
+            if serie is None:
+                continue
+            kapad = serie[(serie.index >= pd.Timestamp(start))
+                          & (serie.index <= pd.Timestamp(slut))]
+            if len(kapad) > 100 and float(kapad.iloc[0]) > 0:
+                faktorer.append(float(kapad.iloc[-1] / kapad.iloc[0]))
+        if faktorer:
+            per_kategori.append(np.array(faktorer))
+            alla.extend(faktorer)
+
+    if not per_kategori:
+        return None
+
+    slumpen = np.random.default_rng(fro)
+    utfall = np.array([
+        np.mean([slumpen.choice(v) for v in per_kategori]) for _ in range(antal)
+    ])
+    utfall = (utfall - 1) * 100
+
+    return Slumpjamforelse(
+        antal=antal,
+        median=float(np.median(utfall)),
+        percentil_5=float(np.percentile(utfall, 5)),
+        percentil_95=float(np.percentile(utfall, 95)),
+        percentil_for_resultatet=float((utfall < resultat_procent).mean() * 100),
+        andel_som_slog_resultatet=float((utfall > resultat_procent).mean() * 100),
+        likaviktad_korg=(float(np.mean(alla)) - 1) * 100 if alla else None,
+    )
 
 
 def _satt_innehav(inst: Installningar, innehav: dict[str, Innehavspost | None]) -> None:

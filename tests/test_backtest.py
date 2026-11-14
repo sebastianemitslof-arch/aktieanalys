@@ -306,3 +306,76 @@ def test_avkastning_och_arsavkastning_haller_ihop(uppsattning, tmp_path):
         )
     sammansatt = (1 + r.arsavkastning / 100) ** r.ar
     assert sammansatt == pytest.approx(1 + r.avkastning / 100, rel=0.02)
+
+
+# =====================================================================
+#  Slumpjämförelsen -- det enda som gör siffran tolkbar
+# =====================================================================
+def test_slumpjamforelse_placerar_resultatet(uppsattning):
+    from aktieanalys.backtest import jamfor_med_slumpen
+
+    inst, data = uppsattning
+    s = jamfor_med_slumpen(
+        inst, data, dt.date(2022, 1, 3), dt.date(2026, 11, 13),
+        resultat_procent=50.0, antal=500,
+    )
+    assert s is not None
+    assert s.antal == 500
+    assert s.percentil_5 <= s.median <= s.percentil_95
+    assert 0 <= s.percentil_for_resultatet <= 100
+    assert s.andel_som_slog_resultatet == pytest.approx(
+        100 - s.percentil_for_resultatet, abs=1.0
+    )
+
+
+def test_resultat_mitt_i_fordelningen_ar_inte_skilt_fran_tur(uppsattning):
+    from aktieanalys.backtest import jamfor_med_slumpen
+
+    inst, data = uppsattning
+    mitten = jamfor_med_slumpen(
+        inst, data, dt.date(2022, 1, 3), dt.date(2026, 11, 13),
+        resultat_procent=0.0, antal=500,
+    )
+    # Ett resultat som ligger under medianen kan omöjligt vara skilt från tur
+    s = jamfor_med_slumpen(
+        inst, data, dt.date(2022, 1, 3), dt.date(2026, 11, 13),
+        resultat_procent=mitten.median, antal=500,
+    )
+    assert not s.skild_fran_tur
+    assert "INTE att skilja från tur" in s.omdome()
+    assert "procent av rena slumpval" in s.omdome()
+
+
+def test_resultat_i_toppen_markeras_som_skilt_fran_tur(uppsattning):
+    from aktieanalys.backtest import jamfor_med_slumpen
+
+    inst, data = uppsattning
+    s = jamfor_med_slumpen(
+        inst, data, dt.date(2022, 1, 3), dt.date(2026, 11, 13),
+        resultat_procent=100_000.0, antal=500,
+    )
+    assert s.skild_fran_tur
+    assert "fortfarande EN" in s.omdome(), "även då ska förbehållet finnas kvar"
+
+
+def test_slumpjamforelsen_foljer_med_resultatet(uppsattning, tmp_path):
+    inst, data = uppsattning
+    with Lager(tmp_path / "b.sqlite") as lager:
+        r = kor_backtest(
+            inst, data, lager, dt.date(2024, 6, 1), dt.date(2025, 6, 1),
+            startkapital=300_000, fordrojning_manader=3,
+        )
+    assert r.slump is not None, "slumpjämförelsen ska alltid räknas"
+    assert r.slump.likaviktad_korg is not None
+
+
+def test_slumpjamforelsen_ar_reproducerbar(uppsattning):
+    from aktieanalys.backtest import jamfor_med_slumpen
+
+    inst, data = uppsattning
+    a = jamfor_med_slumpen(inst, data, dt.date(2022, 1, 3),
+                           dt.date(2026, 11, 13), 50.0, antal=300, fro=7)
+    b = jamfor_med_slumpen(inst, data, dt.date(2022, 1, 3),
+                           dt.date(2026, 11, 13), 50.0, antal=300, fro=7)
+    assert a.median == b.median
+    assert a.percentil_for_resultatet == b.percentil_for_resultatet

@@ -792,6 +792,12 @@ def _aterskapa_databas(args: argparse.Namespace) -> int:
     return 0
 
 
+def _radbryt(text: str, bredd: int) -> list[str]:
+    import textwrap
+
+    return textwrap.wrap(text, bredd)
+
+
 def _backtest(args: argparse.Namespace) -> int:
     import datetime as dt
 
@@ -855,6 +861,24 @@ def _backtest(args: argparse.Namespace) -> int:
               f"portföljen {skillnad:+.1f} procentenheter")
     if not resultat.index:
         print("  inga index kunde hämtas")
+
+    if resultat.slump:
+        s = resultat.slump
+        print("\n" + "-" * 68)
+        print("ÄR DET HÄR SKILLT FRÅN TUR?")
+        print("-" * 68)
+        antal_text = f"{s.antal:,}".replace(",", "\u00a0")
+        print(f"  {antal_text} portföljer valda på måfå, en aktie per")
+        print(f"  kategori, hållna hela perioden:")
+        print(f"    median                 {s.median:7.1f} %")
+        print(f"    5:e till 95:e percentilen   {s.percentil_5:.1f} % "
+              f"till {s.percentil_95:.1f} %")
+        if s.likaviktad_korg is not None:
+            print(f"    likaviktad korg av alla bolag  {s.likaviktad_korg:.1f} %")
+        print()
+        for rad in _radbryt(s.omdome(), 66):
+            print(f"  {rad}")
+        print("-" * 68)
 
     print("\nOMSÄTTNING PER ÅR")
     print(f"  {'år':6} {'byten':>6} {'köp':>5} {'omsättning':>12} {'kostnad':>10}")
