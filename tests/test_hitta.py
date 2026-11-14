@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 
 from aktieanalys.hitta import (
+    KANDA_INVESTMENTBOLAG,
     KRAVER_BEDOMNING,
     SEKTORKARTA,
     Kandidat,
@@ -147,3 +148,73 @@ def test_kontrollmarkering_i_yaml():
                  anmarkning="rymmer investmentbolag"),
     ])
     assert "KONTROLLERA" in yaml_forslag(r)
+
+
+# =====================================================================
+#  Investmentbolag som Yahoo inte känner igen som sådana
+# =====================================================================
+def test_latour_och_lundberg_ar_med_i_listan():
+    """Yahoo klassar dem som Industrials. De skulle annars glida in i
+    Industri med standardmåtten, utan att någon flagga gick upp."""
+    for ticker in ["LATO-B.ST", "LUND-B.ST", "RATO-B.ST"]:
+        assert ticker in KANDA_INVESTMENTBOLAG, ticker
+
+
+def test_investor_och_industrivarden_ar_med():
+    for ticker in ["INVE-B.ST", "INDU-C.ST", "KINV-B.ST"]:
+        assert ticker in KANDA_INVESTMENTBOLAG, ticker
+
+
+def test_vanliga_industribolag_ar_inte_med():
+    for ticker in ["ABB.ST", "VOLV-B.ST", "SAND.ST", "SKF-B.ST",
+                   "STOR-B.ST", "SDIP-B.ST"]:
+        assert ticker not in KANDA_INVESTMENTBOLAG, (
+            f"{ticker} är ett rörelsedrivande bolag, inte ett investmentbolag"
+        )
+
+
+def test_investmentbolag_far_ingen_kategori(monkeypatch):
+    """Ett investmentbolag ska inte kategoriseras alls -- det ska stoppas
+    och förklaras."""
+    import aktieanalys.hitta as hitta
+
+    k = kandidat("LATO-B.ST")
+    monkeypatch.setattr(
+        hitta, "yf", __import__("types").SimpleNamespace(), raising=False
+    )
+
+    class FalskTicker:
+        def __init__(self, t): pass
+        @property
+        def info(self): return {"sector": "Industrials"}
+
+    import sys, types
+    falsk = types.ModuleType("yfinance")
+    falsk.Ticker = FalskTicker
+    monkeypatch.setitem(sys.modules, "yfinance", falsk)
+
+    hitta._fyll_sektorer([k], paus_sek=0)
+    assert k.kategori is None, "ska inte hamna i Industri"
+    assert "investmentbolag" in k.anmarkning
+    assert "EV/EBIT" in k.anmarkning
+
+
+def test_vanligt_industribolag_kategoriseras(monkeypatch):
+    import sys, types
+
+    import aktieanalys.hitta as hitta
+
+    k = kandidat("ABB.ST")
+
+    class FalskTicker:
+        def __init__(self, t): pass
+        @property
+        def info(self): return {"sector": "Industrials"}
+
+    falsk = types.ModuleType("yfinance")
+    falsk.Ticker = FalskTicker
+    monkeypatch.setitem(sys.modules, "yfinance", falsk)
+
+    hitta._fyll_sektorer([k], paus_sek=0)
+    assert k.kategori == "Industri"
+    assert k.anmarkning is None

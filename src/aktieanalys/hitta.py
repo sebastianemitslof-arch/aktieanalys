@@ -38,6 +38,46 @@ SEKTORKARTA = {
     "Real Estate": "Fastighet",
 }
 
+#: Svenska investmentbolag, med ticker. Listan underhålls för hand, och
+#: det är med flit.
+#:
+#: Yahoos sektorindelning fångar dem inte. Investor och Industrivärden
+#: hamnar under "Financial Services", men Lundbergföretagen, Latour och
+#: Ratos klassas som "Industrials" -- och skulle därmed glida in i
+#: Industri med standardmåtten utan att någon flagga gick upp.
+#:
+#: Det vore ett systematiskt fel, inte ett brus. Latours bolagsvärde
+#: rymmer hela börsportföljen medan rörelseresultatet bara kommer från
+#: industrirörelsen, så EV/EBIT blir groteskt högt och bolaget rankas
+#: alltid sist. Samma mekanism som gjorde att substansvärde aldrig
+#: härleds för investmentbolag (se data/harledda.py).
+#:
+#: Det finns ingen datakälla som gör den här indelningen åt oss. Saknas
+#: ett bolag i listan: lägg till det.
+KANDA_INVESTMENTBOLAG = {
+    "INVE-A.ST", "INVE-B.ST",      # Investor
+    "INDU-A.ST", "INDU-C.ST",      # Industrivärden
+    "LATO-B.ST",                   # Latour
+    "LUND-B.ST",                   # Lundbergföretagen
+    "KINV-B.ST",                   # Kinnevik
+    "SVOL-B.ST",                   # Svolder
+    "BURE.ST",                     # Bure Equity
+    "RATO-B.ST",                   # Ratos
+    "CRED-A.ST",                   # Creades
+    "TRAC-B.ST",                   # Traction
+    "ORES.ST",                     # Investment AB Öresund
+    "VEFAB.ST", "VNV.ST",          # VEF, VNV Global
+    "HAV-B.ST",                    # Havsfrun
+}
+
+INVESTMENTBOLAGSVARNING = (
+    "är ett investmentbolag. Yahoos sektor fångar inte det. Varken "
+    "standarduppsättningen eller bankuppsättningen passar: bolagsvärdet "
+    "rymmer hela portföljen medan rörelseresultatet bara kommer från "
+    "rörelsen, så EV/EBIT och P/B blir systematiskt fel. Kategorin "
+    "investmentbolag är avstängd i universum.yaml"
+)
+
 #: Sektorer där Yahoos indelning är för grov för våra måttuppsättningar.
 KRAVER_BEDOMNING = {
     "Financial Services": (
@@ -207,7 +247,10 @@ def _fyll_sektorer(kandidater: list[Kandidat], paus_sek: float) -> None:
         except Exception as e:
             logg.debug("%s: ingen sektor (%s)", k.ticker, e)
 
-        if k.sektor in KRAVER_BEDOMNING:
+        if k.ticker in KANDA_INVESTMENTBOLAG:
+            k.kategori = None
+            k.anmarkning = INVESTMENTBOLAGSVARNING
+        elif k.sektor in KRAVER_BEDOMNING:
             k.kategori, k.anmarkning = KRAVER_BEDOMNING[k.sektor]
         elif k.sektor in SEKTORKARTA:
             k.kategori = SEKTORKARTA[k.sektor]
