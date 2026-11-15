@@ -21,6 +21,17 @@ on:
     # Udda minuttal med flit: scheman på hel timme köar hos GitHub och
     # blir ofta försenade.
     - cron: "37 16 * * 0"
+    #
+    # De två nedan är reserver. GitHub lovar inte att schemalagda
+    # körningar startar -- vid belastning försenas de, och ibland
+    # hoppas de över helt. Det hände 2026-11-15: ingen körning alls
+    # startade. Därför tre chanser i stället för en.
+    #
+    # Steget "Finns veckans rapport redan?" ser till att bara den
+    # första som faktiskt startar gör något. De andra avslutas tomma.
+    # Du får alltså aldrig tre mejl.
+    - cron: "37 20 * * 0"
+    - cron: "37 7 * * 1"
 
   # Gör att du kan starta en körning för hand under fliken Actions.
   workflow_dispatch:
@@ -81,7 +92,33 @@ jobs:
             echo "Ingen dump ännu - databasen byggs från noll i den här körningen."
           fi
 
+      - name: Finns veckans rapport redan?
+        # Bara för schemalagda körningar. Startar du en för hand vill du
+        # ha en rapport, och då ska den aldrig hoppas över.
+        if: ${{ github.event_name == 'schedule' }}
+        run: |
+          nyast=$(ls rapporter/*.html 2>/dev/null \
+                  | xargs -r -n1 basename | sed 's/\.html$//' | sort | tail -1)
+
+          if [ -z "$nyast" ]; then
+            echo "Ingen tidigare rapport. Kör."
+            exit 0
+          fi
+
+          dagar=$(( ( $(date +%s) - $(date -d "$nyast" +%s) ) / 86400 ))
+          echo "Senaste rapporten: $nyast ($dagar dagar sedan)."
+
+          # Under fyra dagar betyder att veckans rapport redan gått ut,
+          # antingen i tid eller i en tidigare reservkörning.
+          if [ "$dagar" -lt 4 ]; then
+            echo "Veckans rapport har redan skickats. Den här körningen gör inget."
+            echo "HOPPADE_OVER=1" >> "$GITHUB_ENV"
+          else
+            echo "Dags för en ny rapport."
+          fi
+
       - name: Kör veckorapporten
+        if: ${{ env.HOPPADE_OVER != '1' }}
         run: |
           flaggor=""
           if [ "${{ inputs.utan_llm }}" = "true" ];  then flaggor="$flaggor --utan-llm"; fi
@@ -91,11 +128,11 @@ jobs:
           python -m aktieanalys veckorapport $flaggor
 
       - name: Skriv databasen till textdumpen
-        if: ${{ inputs.torrkor != true }}
+        if: ${{ inputs.torrkor != true && env.HOPPADE_OVER != '1' }}
         run: python -m aktieanalys dumpa-databas
 
       - name: Spara rapporten som nedladdningsbar fil
-        if: always()
+        if: ${{ always() && env.HOPPADE_OVER != '1' }}
         uses: actions/upload-artifact@v4
         with:
           name: veckorapport
@@ -106,7 +143,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Committa veckans data
-        if: ${{ inputs.torrkor != true }}
+        if: ${{ inputs.torrkor != true && env.HOPPADE_OVER != '1' }}
         run: |
           git config user.name "aktieanalys"
           git config user.email "actions@github.com"
