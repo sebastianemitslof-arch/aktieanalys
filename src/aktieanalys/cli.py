@@ -861,6 +861,14 @@ def _backtest(args: argparse.Namespace) -> int:
               f"portföljen {skillnad:+.1f} procentenheter")
     if not resultat.index:
         print("  inga index kunde hämtas")
+    elif any("prisindex" in n for n in resultat.index):
+        # Portföljens kurser är utdelningsjusterade (auto_adjust), så en
+        # jämförelse mot ett prisindex är inte en rättvis match: den
+        # saknar utdelningarna och smickrar portföljen med ungefär
+        # utdelningsnivån per år. Raden med utdelningar är den som gäller.
+        print("\n  Raderna märkta prisindex saknar utdelningar, medan"
+              "\n  portföljens kurser är utdelningsjusterade. De smickrar"
+              "\n  alltså portföljen. Jämför mot raden som har utdelningar.")
 
     if resultat.slump:
         s = resultat.slump
