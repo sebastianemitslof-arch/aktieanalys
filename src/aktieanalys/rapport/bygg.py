@@ -38,6 +38,11 @@ class Rad:
     namn: str | None
     poang: float | None
     placering: int
+    """Placering på kvantitativ poäng, i hela kategorin. Jämförbar vecka
+    till vecka, för kategorins storlek ändras inte varje vecka."""
+    ordning: int = 0
+    """Placering i tabellen, på slutlig poäng efter riskjustering. Det är
+    den ordning besluten följer, och därför den som visas som #."""
     ar_innehav: bool = False
     forandring_poang: float | None = None
     forandring_placering: int | None = None
@@ -203,6 +208,14 @@ def bygg_rapport(
                 if rad.placering and tidigare["placering"]:
                     rad.forandring_placering = tidigare["placering"] - rad.placering
             kr.rader.append(rad)
+
+        # Tabellen sorteras på slutlig poäng, inte på den kvantitativa.
+        # Annars kan nummer 2 stå med högre poäng än nummer 1, vilket
+        # hände 2026-11-15: RUSTA 69,7 under EVO 69,2. Innehavet behåller
+        # sin plats i ordningen -- det markeras ändå särskilt.
+        kr.rader.sort(key=lambda r: (r.poang is None, -(r.poang or 0.0)))
+        for n, rad in enumerate(kr.rader, start=1):
+            rad.ordning = n
 
         rapport.kategorier.append(kr)
         rapport.antal_bolag += len(kp.bolag)

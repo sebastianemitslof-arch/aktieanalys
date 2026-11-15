@@ -518,3 +518,113 @@ def test_justeringen_sparas_med(
     assert rader["B1.ST"]["justering"] == -8.0
     assert rader["B1.ST"]["poang_slitlig" if False else "poang_slutlig"] < \
            rader["B1.ST"]["poang_kvantitativ"]
+
+
+# =====================================================================
+#  Riskbedömningen ska avgöra valet, inte bara visas i rapporten
+# =====================================================================
+#  Felet som de här testerna spikar: förstagångsköpet valde kp.bolag[0],
+#  alltså den kvantitativa ettan. Riskjusteringen räknades ut, visades i
+#  mejlet och sparades i databasen -- men påverkade aldrig vilket bolag
+#  som föreslogs. Konsument 2026-11-15: EVO föreslogs på 72,8 trots att
+#  budet på bolaget sänkt den till 69,2, under RUSTA på 69,7.
+# =====================================================================
+def _bedomning(ticker, justering):
+    return Bedomning(
+        ticker=ticker, justering=justering,
+        motivering="testmotivering", anvand=True,
+    )
+
+
+def _granskad(*par) -> Kvalitativtresultat:
+    r = Kvalitativtresultat()
+    for ticker, justering in par:
+        r.bedomningar[ticker] = _bedomning(ticker, justering)
+    return r
+
+
+def test_sankt_etta_lamnar_plats_till_tvaan(
+    config_dict, universum_dict, portfolj_dict, tmp_path, lager
+):
+    """Sänks den kvantitativa ettan under tvåan ska tvåan föreslås."""
+    inst = bygg(config_dict, universum_dict, portfolj_dict, tmp_path, innehav=None)
+    tavla, data = scenario(inst)
+    kp = tavla.kategorier["Industri"]
+    etta, tvaa = kp.bolag[0], kp.bolag[1]
+
+    # Precis så stor sänkning att tvåan går om, med liten marginal.
+    behov = (tvaa.totalpoang / etta.totalpoang - 1) * 100 - 0.5
+    assert behov < 0, "tvåan ska ligga under ettan kvantitativt"
+
+    kb = kor(inst, tavla, data, lager,
+             kvalitativt=_granskad((etta.ticker, behov), (tvaa.ticker, 0.0)))
+
+    assert kb.utmanare == tvaa.ticker
+    # Motiveringen måste förklara varför det inte blev sifferettan,
+    # annars ser förslaget obegripligt ut mot tabellen i rapporten.
+    assert etta.ticker in kb.motivering
+    assert "sifferpoäng" in kb.motivering
+    assert kb.riskomval and tvaa.ticker in kb.riskomval
+
+
+def test_oforandrad_etta_foreslas_fortfarande(
+    config_dict, universum_dict, portfolj_dict, tmp_path, lager
+):
+    """Utan sänkning som vänder ordningen ska ettan väljas som förut."""
+    inst = bygg(config_dict, universum_dict, portfolj_dict, tmp_path, innehav=None)
+    tavla, data = scenario(inst)
+    kp = tavla.kategorier["Industri"]
+    etta = kp.bolag[0]
+
+    kb = kor(inst, tavla, data, lager,
+             kvalitativt=_granskad((etta.ticker, -1.0), (kp.bolag[1].ticker, 0.0)))
+
+    assert kb.utmanare == etta.ticker
+    assert kb.riskomval is None
+
+
+def test_obedomt_bolag_utanfor_toppen_far_inte_vinna(
+    config_dict, universum_dict, portfolj_dict, tmp_path, lager
+):
+    """Den dokumenterade luckan: bara topp N tävlar.
+
+    Ett bolag utanför antal_utmanare har kvar sin kvantitativa poäng för
+    att ingen granskat det, inte för att den hållit. Det ska därför inte
+    kunna gå om en nedjusterad etta. Höjer man antal_utmanare vidgas
+    granskningen -- det är avsiktligt en inställning, inte en slump.
+    """
+    inst = bygg(config_dict, universum_dict, portfolj_dict, tmp_path,
+                innehav=None, kvalitativt__antal_utmanare=2)
+    tavla, data = scenario(inst)
+    kp = tavla.kategorier["Industri"]
+    etta, tvaa, trean = kp.bolag[0], kp.bolag[1], kp.bolag[2]
+
+    # Sänk både ettan och tvåan under trean.
+    behov = (trean.totalpoang / etta.totalpoang - 1) * 100 - 1.0
+    kb = kor(inst, tavla, data, lager, kvalitativt=_granskad(
+        (etta.ticker, behov), (tvaa.ticker, behov)))
+
+    assert kb.utmanare in {etta.ticker, tvaa.ticker}
+    assert kb.utmanare != trean.ticker
+
+
+def test_misslyckad_bedomning_tystar_inte_bort_utmanaren(
+    config_dict, universum_dict, portfolj_dict, tmp_path, lager
+):
+    """Gick bedömningen inte igenom ska bolaget ändå få tävla.
+
+    Att plocka bort det vore värre: ett möjligt byte skulle försvinna
+    tyst ur rapporten.
+    """
+    inst = bygg(config_dict, universum_dict, portfolj_dict, tmp_path, innehav=None)
+    tavla, data = scenario(inst)
+    kp = tavla.kategorier["Industri"]
+    etta = kp.bolag[0]
+
+    r = Kvalitativtresultat()
+    r.bedomningar[etta.ticker] = Bedomning(
+        ticker=etta.ticker, anvand=False, orsak="svaret gick inte att tolka")
+
+    kb = kor(inst, tavla, data, lager, kvalitativt=r)
+    assert kb.utmanare == etta.ticker
+    assert kb.utmanarpoang == pytest.approx(etta.totalpoang)

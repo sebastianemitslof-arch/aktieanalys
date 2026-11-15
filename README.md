@@ -583,13 +583,19 @@ Andra flaggor: `--utan-hamtning` (använd databasen som den är),
 Ordningen är vald efter vad du behöver veta först:
 
 1. **Bytesförslag**, med alla villkor och kostnaden i kronor
-2. **Flaggade risker** från det kvalitativa lagret
-3. **Ställning per kategori**: innehavet plus topp 3, med förändring
+2. **Ställning per kategori**: innehavet plus topp 3, med förändring
    mot förra veckan i både poäng och placering
+3. **Flaggade risker** från det kvalitativa lagret, med Claudes
+   motivering i sin helhet
 4. **Underlaget**: uteslutna bolag, obedömbara bolag och värden som
    börjar bli gamla
 
 Innehavet visas alltid, även när det rankar sist i sin kategori.
+
+Tabellerna är sorterade på poängen **efter** riskjustering, alltså den
+som avgör förslagen. Står en siffra i parentes under platsen är det
+bolagets placering på ren sifferpoäng, före justeringen -- då har
+granskningen flyttat om ordningen.
 Nya bolag i toppen märks `ny`, bolag med riskflagga märks `risk`.
 
 Rapporten är en enda HTML-fil på ungefär 8 kB, utan bilder och utan
@@ -784,6 +790,31 @@ Claude får göra **två saker**: flagga risker, och justera poängen inom
 Nyhetsrubriker behandlas som **data, inte instruktioner**. Både
 systemprompten och underlaget säger det uttryckligen, eftersom en rubrik
 i princip kan innehålla text som ser ut som en uppmaning.
+
+### Justeringen avgör valet, den pryder inte bara rapporten
+
+Bytesreglerna väljer på poängen **efter** justering, inte på
+sifferpoängen. Blir ett annat bolag valt än sifferettan står det i
+förslaget varför.
+
+Jämförelsen sker inom kategorins **topp `antal_utmanare`** (standard 3),
+alltså exakt de bolag som skickades till granskning. Skälet är att ett
+obedömt bolag längre ner har kvar sin sifferpoäng -- inte för att den
+granskats och hållit, utan för att ingen har läst dess rapporter. Lät vi
+hela kategorin tävla på justerad poäng skulle granskningen straffa sig
+själv: ett bolag som sänkts 5 % skulle falla under bolag som kanske
+förtjänade en större sänkning.
+
+Priset för det är en känd lucka: ett bolag strax utanför topp 3 kan i
+teorin vara bättre än en nedjusterad etta, men får aldrig chansen. Höj
+`antal_utmanare` i `config.yaml` om du vill vidga granskningen -- det
+kostar tokens i motsvarande grad.
+
+> Det här var ett **fel** fram till 2026-11-15. Justeringen räknades ut,
+> visades i mejlet och sparades i databasen, men förstagångsköpet valde
+> ändå sifferettan. Konkret: Konsument föreslog EVO på 72,8 trots att
+> budet på bolaget sänkt poängen till 69,2 -- under RUSTA på 69,7.
+> `tests/test_byten.py` spikar numera beteendet.
 
 ### Flaggan som påverkar bytesreglerna
 

@@ -95,6 +95,10 @@ class Kategoribeslut:
     foreslas: bool = False
     undantag: str | None = None
     motivering: str = ""
+    riskomval: str | None = None
+    """Satt när riskbedömningen gjorde att ett annat bolag valdes än det
+    med högst sifferpoäng. Visas i rapporten, annars ser förslaget
+    obegripligt ut mot tabellen."""
 
     @property
     def ej_uppfyllda(self) -> list[Villkor]:
@@ -238,12 +242,40 @@ def bedom_byten(
 
     for kategori, kp in tavla.kategorier.items():
         kb = _bedom_kategori(
-            inst, kategori, kp, data, lager, kvalitativt, datum, i_fonster
+            inst, kategori, kp, data, lager, kvalitativt, datum, i_fonster,
+            inst.config.kvalitativt.antal_utmanare,
         )
         beslut.kategorier[kategori] = kb
 
     logg.info("bytesbedömning klar: %s", beslut.sammanfattning())
     return beslut
+
+
+def _kandidater(kp, antal_utmanare: int) -> list[Bolagspoang]:
+    """Bolagen som får tävla om förslaget: kategorins topp N.
+
+    N är samma antal_utmanare som skickas till det kvalitativa lagret.
+    Det är med flit, och skälet är att jämförelsen ska vara rättvis.
+
+    Det kvalitativa lagret granskar bara toppen. Ett bolag längre ner har
+    kvar sin kvantitativa poäng -- inte för att den granskats och hållit,
+    utan för att ingen har läst bolagets rapporter. Lät vi hela kategorin
+    tävla på slutlig poäng skulle granskningen straffa sig själv: ett
+    bolag som sänkts 5 % faller under bolag som kanske förtjänade en
+    större sänkning, om någon hade tittat.
+
+    Lyckades en enskild bedömning inte behåller bolaget sin kvantitativa
+    poäng men stannar kvar bland kandidaterna. Att plocka bort det skulle
+    dölja ett möjligt byte, vilket är värre än en ojämn jämförelse inom
+    toppen -- och rapporten visar ändå hur många bedömningar som gick
+    igenom.
+
+    Priset: ett bolag strax utanför topp N kan i teorin vara bättre än en
+    nedjusterad etta, men får aldrig chansen eftersom det inte bedömdes.
+    Vill du stänga luckan, höj antal_utmanare i config.yaml. Det kostar
+    tokens men vidgar granskningen.
+    """
+    return list(kp.topp(antal_utmanare))
 
 
 def _poang(bp: Bolagspoang, kvalitativt: Kvalitativtresultat | None) -> float | None:
@@ -264,6 +296,7 @@ def _bedom_kategori(
     kvalitativt: Kvalitativtresultat | None,
     datum: dt.date,
     i_fonster: bool,
+    antal_utmanare: int,
 ) -> Kategoribeslut:
     c = inst.config.byten
     innehav_konfig = inst.innehav_i(kategori)
@@ -276,7 +309,12 @@ def _bedom_kategori(
 
     # ---- förstagångsköp -------------------------------------------
     if not innehav_konfig.finns:
-        basta = kp.bolag[0]
+        # Tidigare stod här kp.bolag[0], alltså den kvantitativa ettan.
+        # Det gjorde att en riskflagga räknades ut, visades i rapporten
+        # och sparades -- men aldrig påverkade vilket bolag som
+        # föreslogs. Nu avgör den slutliga poängen.
+        kandidater = _kandidater(kp, antal_utmanare)
+        basta = max(kandidater, key=lambda b: _poang(b, kvalitativt) or 0.0)
         kb = Kategoribeslut(
             kategori=kategori, typ="forstagangskop",
             utmanare=basta.ticker, utmanarpoang=_poang(basta, kvalitativt),
@@ -292,6 +330,17 @@ def _bedom_kategori(
             f"inget innehav i kategorin. {basta.ticker} rankar högst "
             f"({kb.utmanarpoang:.1f} poäng)."
         )
+        # Blev det ett annat bolag än den kvantitativa ettan ska det
+        # framgå varför, annars ser förslaget obegripligt ut mot tabellen.
+        kvantetta = kp.bolag[0]
+        if kvantetta.ticker != basta.ticker:
+            kb.riskomval = (
+                f"{kvantetta.ticker} har högre sifferpoäng "
+                f"({kvantetta.totalpoang:.1f}) men sänktes av riskbedömningen "
+                f"till {_poang(kvantetta, kvalitativt):.1f}, under "
+                f"{basta.ticker} på {kb.utmanarpoang:.1f}."
+            )
+            kb.motivering += " " + kb.riskomval
         return kb
 
     # ---- byte ------------------------------------------------------
@@ -304,7 +353,10 @@ def _bedom_kategori(
         innehavstid_manader=innehav_konfig.innehavstid_manader(datum),
     )
 
-    utmanare = [b for b in kp.bolag if b.ticker != innehav_konfig.ticker]
+    utmanare = [
+        b for b in _kandidater(kp, antal_utmanare)
+        if b.ticker != innehav_konfig.ticker
+    ]
     if not utmanare or innehavspoang is None or innehavspoang <= 0:
         kb.motivering = (
             "innehavet går inte att poängsätta -- ingen jämförelse möjlig"

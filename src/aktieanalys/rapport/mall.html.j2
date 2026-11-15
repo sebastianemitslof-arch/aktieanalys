@@ -90,6 +90,10 @@
         ({{ '%+.1f'|format(f.forbattring_procent) }} %)
       </div>
     {% endif %}
+    {% if f.riskomval %}
+      <div class="liten" style="margin-top:8px;color:#9a7b1f">
+        <strong>Riskbedömningen ändrade valet:</strong> {{ f.riskomval }}</div>
+    {% endif %}
     {% if f.undantag %}
       <div class="liten" style="margin-top:8px;color:#9a7b1f">
         <strong>Undantag:</strong> {{ f.undantag }}</div>
@@ -121,31 +125,6 @@
   </div>
   {% endfor %}
 
-  {# ---------------- RISKFLAGGOR ---------------- #}
-  {% if r.riskflaggor %}
-  <div class="kort">
-    <h2>Flaggade risker</h2>
-    {% for ticker, b in r.riskflaggor.items() %}
-    <div style="margin-bottom:12px">
-      <h3>{{ ticker }}
-        {%- if b.fundamental_forsamring %}
-        <span class="marke m-risk">fundamental försämring</span>{% endif %}
-        <span class="dampad" style="font-weight:400">
-          {{ '%+.1f'|format(b.justering) }} % på poängen</span>
-      </h3>
-      <div class="liten">{{ b.motivering }}</div>
-      <ul class="villkor">
-        {% for risk in b.risker %}<li>&bull;&nbsp; {{ risk.som_text() }}</li>{% endfor %}
-      </ul>
-      {% if b.klamrad_fran %}
-      <div class="liten dampad" style="margin-top:4px">
-        Modellen föreslog {{ '%.1f'|format(b.klamrad_fran) }} %, kapat till mandatet.</div>
-      {% endif %}
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
   {# ---------------- STÄLLNING PER KATEGORI ---------------- #}
   {% for k in r.kategorier %}
   <div class="kort bevakning">
@@ -157,7 +136,11 @@
       <tr><th class="nr">#</th><th>Bolag</th><th class="h">Poäng</th><th class="h">Mot&nbsp;förra</th></tr>
       {% for rad in k.rader %}
       <tr{% if rad.ar_innehav %} class="innehav"{% endif %}>
-        <td class="dampad nr">{{ rad.placering }}</td>
+        <td class="dampad nr">{{ rad.ordning }}
+          {%- if rad.placering and rad.placering != rad.ordning %}
+          <div class="liten" style="font-weight:400">({{ rad.placering }})</div>
+          {%- endif %}
+        </td>
         <td>
           <strong>{{ rad.ticker }}</strong>
           {%- if rad.ar_innehav %} <span class="marke m-innehav">innehav</span>{% endif %}
@@ -204,6 +187,31 @@
   </div>
   {% endfor %}
 
+  {# ---------------- RISKFLAGGOR ---------------- #}
+  {% if r.riskflaggor %}
+  <div class="kort">
+    <h2>Flaggade risker</h2>
+    {% for ticker, b in r.riskflaggor.items() %}
+    <div style="margin-bottom:12px">
+      <h3>{{ ticker }}
+        {%- if b.fundamental_forsamring %}
+        <span class="marke m-risk">fundamental försämring</span>{% endif %}
+        <span class="dampad" style="font-weight:400">
+          {{ '%+.1f'|format(b.justering) }} % på poängen</span>
+      </h3>
+      <div class="liten">{{ b.motivering }}</div>
+      <ul class="villkor">
+        {% for risk in b.risker %}<li>&bull;&nbsp; {{ risk.som_text() }}</li>{% endfor %}
+      </ul>
+      {% if b.klamrad_fran %}
+      <div class="liten dampad" style="margin-top:4px">
+        Modellen föreslog {{ '%.1f'|format(b.klamrad_fran) }} %, kapat till mandatet.</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {# ---------------- DATAKVALITET ---------------- #}
   {% if r.datakvalitet.nagot_att_visa %}
   <div class="kort">
@@ -237,6 +245,9 @@
   <div class="fot">
     Poängen är en <strong>relativ rangordning inom varje kategori</strong>,
     inte en avkastningsprognos.<br>
+    Tabellerna är sorterade på poängen efter riskjustering, alltså den
+    som avgör förslagen. Står en siffra i parentes under platsen är det
+    bolagets placering på ren sifferpoäng, före justeringen.<br>
     Systemet analyserar och föreslår &mdash; det handlar aldrig.
     Alla beslut är dina.<br>
     {% if r.kvalitativt and r.kvalitativt.aktiverat %}
