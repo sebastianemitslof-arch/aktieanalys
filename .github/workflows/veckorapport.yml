@@ -97,8 +97,12 @@ jobs:
         # ha en rapport, och då ska den aldrig hoppas över.
         if: ${{ github.event_name == 'schedule' }}
         run: |
+          # Bara filer som heter ÅÅÅÅ-MM-DD.html. Allt annat i mappen
+          # ignoreras, annars kan en handskriven fil få "date -d" att
+          # fallera och sänka hela veckans körning.
           nyast=$(ls rapporter/*.html 2>/dev/null \
-                  | xargs -r -n1 basename | sed 's/\.html$//' | sort | tail -1)
+                  | xargs -r -n1 basename | sed 's/\.html$//' \
+                  | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' | sort | tail -1)
 
           if [ -z "$nyast" ]; then
             echo "Ingen tidigare rapport. Kör."
